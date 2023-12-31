@@ -26,6 +26,7 @@ As the script also stores the raw email in the database, the database can become
 - [ ] When syncing again, use the timestaxmp of the newest email in the database as the `after` parameter for the Gmail API. This will prevent iteration over all emails again.
 - [ ] Add a flag to prevent storing raw emails in the database to save space.
 - [ ] Detect deleted emails and mark them as deleted in the database.
+- [ ] Add proper commandline interface.
 
 ## Example queries
 
