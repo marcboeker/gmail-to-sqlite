@@ -1,0 +1,5 @@
+credentials.json
+messages.db
+.venv
+__pycache__
+.vscode
