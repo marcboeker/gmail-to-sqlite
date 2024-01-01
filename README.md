@@ -25,19 +25,19 @@ As the script also stores the raw email in the database, the database can become
 
 ```sql
 CREATE TABLE IF NOT EXISTS "messages" (
-	"id" INTEGER NOT NULL PRIMARY KEY, -- internal id
-	"message_id" TEXT NOT NULL, -- Gmail message id
-	"sender" TEXT NOT NULL, -- Full sender in the form "Foo Bar <foo@example.com>"
-	"sender_name" TEXT NOT NULL, -- Extracted name: Foo Bar
-	"sender_email" TEXT NOT NULL, -- Extracted email address: foo@example.com
-	"recipients" JSON NOT NULL, -- JSON array: [{"email": "foo@example.com", "name": "Foo Bar"}, ...]
-	"subject" TEXT NOT NULL, -- Subject of the email
-	"body" TEXT NOT NULL, -- Extracted body either als HTML or plain text
-	"raw" JSON NOT NULL, -- Raw email from Gmail fetch response
-	"size" INTEGER NOT NULL, -- Size reported by Gmail
-	"timestamp" DATETIME NOT NULL, -- When the email was sent/received
-	"is_read" INTEGER NOT NULL, -- 0=Unread, 1=Read
-	"last_indexed" DATETIME NOT NULL -- Timestamp when the email was last seen on the server
+    "id" INTEGER NOT NULL PRIMARY KEY, -- internal id
+    "message_id" TEXT NOT NULL, -- Gmail message id
+    "sender" TEXT NOT NULL, -- Full sender in the form "Foo Bar <foo@example.com>"
+    "sender_name" TEXT NOT NULL, -- Extracted name: Foo Bar
+    "sender_email" TEXT NOT NULL, -- Extracted email address: foo@example.com
+    "recipients" JSON NOT NULL, -- JSON array: [{"email": "foo@example.com", "name": "Foo Bar"}, ...]
+    "subject" TEXT NOT NULL, -- Subject of the email
+    "body" TEXT NOT NULL, -- Extracted body either als HTML or plain text
+    "raw" JSON NOT NULL, -- Raw email from Gmail fetch response
+    "size" INTEGER NOT NULL, -- Size reported by Gmail
+    "timestamp" DATETIME NOT NULL, -- When the email was sent/received
+    "is_read" INTEGER NOT NULL, -- 0=Unread, 1=Read
+    "last_indexed" DATETIME NOT NULL -- Timestamp when the email was last seen on the server
 );
 ```
 
@@ -94,15 +94,10 @@ ORDER BY count DESC;
 ### Show who has sent the largest emails (incl. attachments)
 
 ```sql
-SELECT
-	sender_email,
-	sum(size) AS size
-FROM
-	messages
-GROUP BY
-	sender_email
-ORDER BY
-	size DESC
+SELECT sender_email, sum(size) AS size
+FROM messages
+GROUP BY sender_email
+ORDER BY size DESC
 ```
 
 ## Roadmap
