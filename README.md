@@ -21,7 +21,7 @@ This is a script to download emails from Gmail and store them in a SQLite databa
 
 ## Note
 
-As the script also stores the raw email in the database, the database can become quite large. If you don't need the raw emails, you can remove the `raw` column from the `messages` table.
+As the script also stores the raw email in the database, the database can become quite large. If you don't need the raw emails, you can use the `--exclude-raw` flag to not store them in the database.
 
 ## Commandline parameters
 
@@ -33,6 +33,7 @@ sync                 Sync emails from Gmail to the database.
 
 --data-dir DATA_DIR  Path to the directory where all data is stored.
 --only-new           Fetch new emails after the last sync.
+--exclude-raw        Do not store the raw email in the database.
 ```
 
 ## Schema
@@ -119,5 +120,4 @@ ORDER BY size DESC
 
 ## Roadmap
 
-- [ ] Add a flag to prevent storing raw emails in the database to save space.
 - [ ] Detect deleted emails and mark them as deleted in the database.

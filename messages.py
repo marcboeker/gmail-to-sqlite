@@ -32,13 +32,14 @@ def decode_body(part) -> str:
     return ""
 
 
-def process_message(service, id):
+def process_message(service, id: str, exclude_raw=False):
     """
     Process a message retrieved from Gmail.
 
     Args:
         service: The service object used to retrieve the message.
-        id: The ID of the message to be processed.
+        id (str): The ID of the message to be processed.
+        exclude_raw (bool): Whether to store the raw message in the database or not.
 
     Returns:
         The timestamp of the processed message.
@@ -114,7 +115,7 @@ def process_message(service, id):
                 subject=subject,
                 body=body,
                 labels=labels,
-                raw=msg,
+                raw=None if exclude_raw else msg,
                 size=size,
                 timestamp=timestamp,
                 is_read=is_read,
@@ -150,13 +151,14 @@ def process_message(service, id):
     return timestamp
 
 
-def sync_messages(credentials, only_new=False) -> int:
+def sync_messages(credentials, only_new=False, exclude_raw=False) -> int:
     """
     Fetches messages from the Gmail API using the provided credentials.
 
     Args:
         credentials (object): The credentials object used to authenticate the API request.
         only_new (bool): Whether to sync only the messages that have not been synced before.
+        exclude_raw (bool): Whether to store the raw message in the database or not.
 
     Returns:
         int: The number of messages fetched.
@@ -195,7 +197,7 @@ def sync_messages(credentials, only_new=False) -> int:
 
         total_messages += len(messages)
         for i, message in enumerate(messages, start=total_messages - len(messages) + 1):
-            date = process_message(service, message["id"])
+            date = process_message(service, message["id"], exclude_raw=exclude_raw)
             print(f"Syncing message {message['id']} from {date} (Count: {i})")
 
         if "nextPageToken" in results:

@@ -41,7 +41,7 @@ class Message(Model):
     subject = TextField()
     body = TextField()
     labels = JSONField()
-    raw = JSONField()
+    raw = JSONField(null=True)
     size = IntegerField()
     timestamp = DateTimeField()
     is_read = BooleanField()

@@ -33,6 +33,11 @@ if __name__ == "__main__":
         help="Fetch only the messages that have not been synced before",
         action="store_true",
     )
+    parser.add_argument(
+        "--exclude-raw",
+        help="Do not store raw messages in the database",
+        action="store_true",
+    )
 
     args = parser.parse_args()
 
@@ -41,6 +46,6 @@ if __name__ == "__main__":
 
     db = init_db(args.data_dir)
     if args.command == "sync":
-        sync_messages(credentials, only_new=args.only_new)
+        sync_messages(credentials, only_new=args.only_new, exclude_raw=args.exclude_raw)
 
     db.close()
