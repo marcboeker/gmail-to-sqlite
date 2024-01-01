@@ -59,16 +59,17 @@ def process_message(service, id: str, exclude_raw=False):
     last_indexed = datetime.now()
 
     for header in msg["payload"]["headers"]:
-        if header["name"] == "From":
+        name = header["name"].lower()
+        if name == "from":
             sender = header["value"]
             sender_name, sender_email = parseaddr(sender)
-        elif header["name"] == "To":
+        elif name == "to":
             for r in header["value"].split(";"):
                 pr = parseaddr(r)
                 recipients.append({"name": pr[0], "email": pr[1]})
-        elif header["name"] == "Subject":
+        elif name == "subject":
             subject = header["value"]
-        elif header["name"] == "Date":
+        elif name == "date":
             timestamp = parsedate_to_datetime(header["value"])
 
     # Determine if the message has been read.
