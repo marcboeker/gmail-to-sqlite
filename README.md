@@ -13,15 +13,27 @@ This is a script to download emails from Gmail and store them in a SQLite databa
 
 ## Usage
 
-### Index all emails
+### Sync all emails
 
-1. Run the script: `python main.py index --data-dir path/to/your/data` where `--<data-dir>` is the path, where all data is stored. This creates a SQLite database in `<data-dir>/messages.db` and store the user credentials under `<data-dir>/credentials.json`.
+1. Run the script: `python main.py sync --data-dir path/to/your/data` where `--<data-dir>` is the path, where all data is stored. This creates a SQLite database in `<data-dir>/messages.db` and store the user credentials under `<data-dir>/credentials.json`.
 2. After the script has finished, you can query the database using e.g. the `sqlite3` command line tool: `sqlite3 <data-dir>/messages.db`.
 3. You can run the script again to download new emails. It will only add emails that are not already in the database and update the `last_indexed` timestamp, the `is_read` flag and the `labels` . At the moment, the script will sync all emails again. This will be improved in the future.
 
 ## Note
 
 As the script also stores the raw email in the database, the database can become quite large. If you don't need the raw emails, you can remove the `raw` column from the `messages` table.
+
+## Commandline parameters
+
+```
+usage: main.py [-h] [--data-dir DATA_DIR] [--update] {sync}
+
+Main commands:
+sync                 Sync emails from Gmail to the database.
+
+--data-dir DATA_DIR  Path to the directory where all data is stored.
+--only-new           Fetch new emails after the last sync.
+```
 
 ## Schema
 
@@ -107,7 +119,5 @@ ORDER BY size DESC
 
 ## Roadmap
 
-- [ ] When syncing again, use the timestaxmp of the newest email in the database as the `after` parameter for the Gmail API. This will prevent iteration over all emails again.
 - [ ] Add a flag to prevent storing raw emails in the database to save space.
 - [ ] Detect deleted emails and mark them as deleted in the database.
-- [ ] Add proper commandline interface.

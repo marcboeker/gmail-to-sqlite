@@ -150,16 +150,29 @@ def process_message(service, id):
     return timestamp
 
 
-def sync_messages(credentials) -> int:
+def sync_messages(credentials, only_new=False) -> int:
     """
     Fetches messages from the Gmail API using the provided credentials.
 
     Args:
         credentials (object): The credentials object used to authenticate the API request.
+        only_new (bool): Whether to sync only the messages that have not been synced before.
 
     Returns:
         int: The number of messages fetched.
     """
+
+    query = []
+    if only_new:
+        last_message = Message.select().order_by(Message.timestamp.desc()).first()
+        if last_message:
+            ts = datetime.fromisoformat(last_message.timestamp)
+            query.append(f"after:{int(ts.timestamp())}")
+
+        first_message = Message.select().order_by(Message.timestamp.asc()).first()
+        if first_message:
+            ts = datetime.fromisoformat(first_message.timestamp)
+            query.append(f"before:{int(ts.timestamp())}")
 
     service = build("gmail", "v1", credentials=credentials)
 
@@ -170,7 +183,12 @@ def sync_messages(credentials) -> int:
         results = (
             service.users()
             .messages()
-            .list(userId="me", maxResults=MAX_RESULTS, pageToken=page_token)
+            .list(
+                userId="me",
+                maxResults=MAX_RESULTS,
+                pageToken=page_token,
+                q=" | ".join(query),
+            )
             .execute()
         )
         messages = results.get("messages", [])
@@ -178,7 +196,7 @@ def sync_messages(credentials) -> int:
         total_messages += len(messages)
         for i, message in enumerate(messages, start=total_messages - len(messages) + 1):
             date = process_message(service, message["id"])
-            print(f"Added message {i} of {total_messages} ({date})")
+            print(f"Syncing message {message['id']} from {date} (Count: {i})")
 
         if "nextPageToken" in results:
             page_token = results["nextPageToken"]
