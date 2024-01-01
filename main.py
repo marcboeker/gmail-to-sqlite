@@ -1,12 +1,13 @@
+import argparse
 import os
 import sys
 
 from auth import get_auth
 from db import Message, init_db
-from messages import fetch_message, fetch_messages
+from messages import fetch_message, sync_messages
 
 
-def get_project():
+def prepare_data_dir(data_dir: str) -> None:
     """
     Get the project name from command line arguments and create a directory for it if it doesn't exist.
 
@@ -14,23 +15,35 @@ def get_project():
         ValueError: If project name is not provided.
 
     Returns:
-        str: The project name.
+        None
     """
-    if len(sys.argv) < 2:
-        raise ValueError("Project name must be provided")
-    project = sys.argv[1]
 
-    if not os.path.exists(project):
-        os.makedirs(project)
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
 
-    return project
+
+def index(data_dir: str):
+    """
+    Index command-line command.
+    """
+
+    credentials = get_auth(data_dir)
+    sync_messages(credentials)
 
 
 if __name__ == "__main__":
-    project = get_project()
-    db = init_db(project)
-    credentials = get_auth(project)
-    # Fetch a single message by ID
-    # fetch_message(credentials, "<message_id>")
-    fetch_messages(credentials)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("command", help="The command to run: {index}")
+    parser.add_argument(
+        "--data-dir", help="The path where the data should be stored", required=True
+    )
+
+    args = parser.parse_args()
+
+    prepare_data_dir(args.data_dir)
+
+    db = init_db(args.data_dir)
+    if args.command == "index":
+        index(args.data_dir)
+
     db.close()

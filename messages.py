@@ -54,6 +54,7 @@ def process_message(service, id):
     size = msg["sizeEstimate"]
     timestamp = None
     is_read = False
+    is_outgoing = False
     last_indexed = datetime.now()
 
     for header in msg["payload"]["headers"]:
@@ -70,12 +71,16 @@ def process_message(service, id):
             timestamp = parsedate_to_datetime(header["value"])
 
     # Determine if the message has been read.
+    labels = msg["labelIds"]
     if "labelIds" in msg:
         labels = msg["labelIds"]
         if "UNREAD" in labels:
             is_read = False
         else:
             is_read = True
+
+        if "SENT" in labels:
+            is_outgoing = True
 
     # For non multipart messages, extract the body from the message.
     if "body" in msg["payload"]:
@@ -101,21 +106,25 @@ def process_message(service, id):
         message = (
             Message.insert(
                 message_id=id,
+                thread_id=msg["threadId"],
                 sender=sender,
                 sender_name=sender_name,
                 sender_email=sender_email,
                 recipients=recipients,
                 subject=subject,
                 body=body,
+                labels=labels,
                 raw=msg,
                 size=size,
                 timestamp=timestamp,
                 is_read=is_read,
+                is_outgoing=is_outgoing,
                 last_indexed=last_indexed,
             )
             .on_conflict(
                 conflict_target=[Message.message_id],
                 preserve=[
+                    Message.thread_id,
                     Message.sender,
                     Message.sender_name,
                     Message.sender_email,
@@ -125,8 +134,13 @@ def process_message(service, id):
                     Message.raw,
                     Message.size,
                     Message.timestamp,
+                    Message.is_outgoing,
                 ],
-                update={Message.is_read: is_read, Message.last_indexed: last_indexed},
+                update={
+                    Message.is_read: is_read,
+                    Message.last_indexed: last_indexed,
+                    Message.labels: labels,
+                },
             )
             .execute()
         )
@@ -136,7 +150,7 @@ def process_message(service, id):
     return timestamp
 
 
-def fetch_messages(credentials) -> int:
+def sync_messages(credentials) -> int:
     """
     Fetches messages from the Gmail API using the provided credentials.
 

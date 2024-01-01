@@ -13,9 +13,11 @@ This is a script to download emails from Gmail and store them in a SQLite databa
 
 ## Usage
 
-1. Run the script: `python main.py <project-name>` where `<project-name>` is the name of the project e.g. `bob`. This will create a SQLite database in `<project-name>/messages.db` and store the user credentials under `<project-name>/credentials.json`.
-2. After the script has finished, you can query the database using e.g. the `sqlite3` command line tool: `sqlite3 <project-name>/messages.db`.
-3. You can run the script again to download new emails. It will only add emails that are not already in the database and update the `last_indexed` timestamp and the `is_read` flag. At the moment, the script will sync all emails again. This will be improved in the future.
+### Index all emails
+
+1. Run the script: `python main.py index --data-dir path/to/your/data` where `--<data-dir>` is the path, where all data is stored. This creates a SQLite database in `<data-dir>/messages.db` and store the user credentials under `<data-dir>/credentials.json`.
+2. After the script has finished, you can query the database using e.g. the `sqlite3` command line tool: `sqlite3 <data-dir>/messages.db`.
+3. You can run the script again to download new emails. It will only add emails that are not already in the database and update the `last_indexed` timestamp, the `is_read` flag and the `labels` . At the moment, the script will sync all emails again. This will be improved in the future.
 
 ## Note
 
@@ -27,16 +29,19 @@ As the script also stores the raw email in the database, the database can become
 CREATE TABLE IF NOT EXISTS "messages" (
     "id" INTEGER NOT NULL PRIMARY KEY, -- internal id
     "message_id" TEXT NOT NULL, -- Gmail message id
+    "thread_id" TEXT NOT NULL, -- Gmail thread id
     "sender" TEXT NOT NULL, -- Full sender in the form "Foo Bar <foo@example.com>"
     "sender_name" TEXT NOT NULL, -- Extracted name: Foo Bar
     "sender_email" TEXT NOT NULL, -- Extracted email address: foo@example.com
     "recipients" JSON NOT NULL, -- JSON array: [{"email": "foo@example.com", "name": "Foo Bar"}, ...]
     "subject" TEXT NOT NULL, -- Subject of the email
     "body" TEXT NOT NULL, -- Extracted body either als HTML or plain text
+    "labels" JSON NOT NULL, -- JSON array: ["INBOX", "UNREAD", ...]
     "raw" JSON NOT NULL, -- Raw email from Gmail fetch response
     "size" INTEGER NOT NULL, -- Size reported by Gmail
     "timestamp" DATETIME NOT NULL, -- When the email was sent/received
     "is_read" INTEGER NOT NULL, -- 0=Unread, 1=Read
+    "is_outgoing" INTEGER NOT NULL, -- 0=Incoming, 1=Outgoing
     "last_indexed" DATETIME NOT NULL -- Timestamp when the email was last seen on the server
 );
 ```

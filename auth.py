@@ -8,13 +8,13 @@ SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 OAUTH2_CREDENTIALS = "credentials.json"
 
 
-def get_auth(project: str) -> google.oauth2.credentials.Credentials:
+def get_auth(data_dir: str) -> google.oauth2.credentials.Credentials:
     """
-    Retrieves the authentication credentials for the specified project by either loading
-    it from the <project>/credentials.json file or by running the authentication flow.
+    Retrieves the authentication credentials for the specified data_dir by either loading
+    it from the <data_dir>/credentials.json file or by running the authentication flow.
 
     Args:
-        project (str): The name of the project.
+        data_dir (str): The path where to store data.
 
     Returns:
         google.oauth2.credentials.Credentials: The authentication credentials.
@@ -25,7 +25,7 @@ def get_auth(project: str) -> google.oauth2.credentials.Credentials:
 
     flow = InstalledAppFlow.from_client_secrets_file(OAUTH2_CREDENTIALS, SCOPES)
 
-    credentials_file = f"{project}/credentials.json"
+    credentials_file = f"{data_dir}/credentials.json"
     if not os.path.exists(credentials_file):
         credentials = flow.run_local_server(port=0)
         with open(credentials_file, "w") as f:
