@@ -116,6 +116,29 @@ GROUP BY sender->>'$.email'
 ORDER BY size DESC
 ```
 
+### Count the number of emails that I have sent to myself
+
+```sql
+SELECT count(*)
+FROM messages
+WHERE EXISTS (
+  SELECT 1
+  FROM json_each(messages.recipients)
+  WHERE json_extract(value, '$.email') = 'foo@example.com'
+)
+AND sender->>'$.email' = 'foo@example.com'
+```
+
+### List the senders who have sent me the largest total volume of emails in megabytes
+
+```sql
+SELECT sender->>'$.email', sum(size)/1024/1024 as total_size
+FROM messages
+WHERE is_outgoing=false
+GROUP BY sender->>'$.email'
+ORDER BY total_size DESC
+```
+
 ## Roadmap
 
 - [ ] Detect deleted emails and mark them as deleted in the database.
