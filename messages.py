@@ -46,7 +46,6 @@ def process_message(service, id: str, exclude_raw=False):
     """
 
     msg = service.users().messages().get(userId="me", id=id).execute()
-    sender = ""
     sender_name = ""
     sender_email = ""
     recipients = []
@@ -61,8 +60,7 @@ def process_message(service, id: str, exclude_raw=False):
     for header in msg["payload"]["headers"]:
         name = header["name"].lower()
         if name == "from":
-            sender = header["value"]
-            sender_name, sender_email = parseaddr(sender)
+            sender_name, sender_email = parseaddr(header["value"])
         elif name == "to":
             for r in header["value"].split(";"):
                 pr = parseaddr(r)
@@ -109,9 +107,7 @@ def process_message(service, id: str, exclude_raw=False):
             Message.insert(
                 message_id=id,
                 thread_id=msg["threadId"],
-                sender=sender,
-                sender_name=sender_name,
-                sender_email=sender_email,
+                sender={"name": sender_name, "email": sender_email},
                 recipients=recipients,
                 subject=subject,
                 body=body,
@@ -128,8 +124,6 @@ def process_message(service, id: str, exclude_raw=False):
                 preserve=[
                     Message.thread_id,
                     Message.sender,
-                    Message.sender_name,
-                    Message.sender_email,
                     Message.recipients,
                     Message.subject,
                     Message.body,

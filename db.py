@@ -13,9 +13,7 @@ class Message(Model):
     Attributes:
         message_id (TextField): The unique identifier of the message.
         thread_id (TextField): The unique identifier of the thread.
-        sender (TextField): The sender of the message.
-        sender_name (TextField): The name of the sender.
-        sender_email (TextField): The email address of the sender.
+        sender (JSONField): The sender of the message.
         recipients (JSONField): The recipients of the message.
         subject (TextField): The subject of the message.
         body (TextField): The body of the message.
@@ -34,9 +32,7 @@ class Message(Model):
 
     message_id = TextField(unique=True)
     thread_id = TextField()
-    sender = TextField()
-    sender_name = TextField()
-    sender_email = TextField()
+    sender = JSONField()
     recipients = JSONField()
     subject = TextField()
     body = TextField()

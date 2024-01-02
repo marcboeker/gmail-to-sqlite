@@ -43,9 +43,7 @@ CREATE TABLE IF NOT EXISTS "messages" (
     "id" INTEGER NOT NULL PRIMARY KEY, -- internal id
     "message_id" TEXT NOT NULL, -- Gmail message id
     "thread_id" TEXT NOT NULL, -- Gmail thread id
-    "sender" TEXT NOT NULL, -- Full sender in the form "Foo Bar <foo@example.com>"
-    "sender_name" TEXT NOT NULL, -- Extracted name: Foo Bar
-    "sender_email" TEXT NOT NULL, -- Extracted email address: foo@example.com
+    "sender" JSON NOT NULL, -- Sender as JSON in the form {"name": "Foo Bar", "email": "foo@example.com"}
     "recipients" JSON NOT NULL, -- JSON array: [{"email": "foo@example.com", "name": "Foo Bar"}, ...]
     "subject" TEXT NOT NULL, -- Subject of the email
     "body" TEXT NOT NULL, -- Extracted body either als HTML or plain text
@@ -64,9 +62,9 @@ CREATE TABLE IF NOT EXISTS "messages" (
 ### Get the number of emails per sender
 
 ```sql
-SELECT sender_email, COUNT(*) AS count
+SELECT sender->>'$.email', COUNT(*) AS count
 FROM messages
-GROUP BY sender
+GROUP BY sender->>'$.email'
 ORDER BY count DESC;
 ```
 
@@ -75,10 +73,10 @@ ORDER BY count DESC;
 This is great to determine who is spamming you the most with uninteresting emails.
 
 ```sql
-SELECT sender_email, COUNT(*) AS count
+SELECT sender->>'$.email', COUNT(*) AS count
 FROM messages
 WHERE is_read = 0
-GROUP BY sender_email
+GROUP BY sender->>'$.email'
 ORDER BY count DESC;
 ```
 
@@ -102,19 +100,19 @@ ORDER BY count DESC;
 This is an amateurish way to find all newsletters and group them by sender. It's not perfect, but it's a start. You could also use
 
 ```sql
-SELECT sender_email, COUNT(*) AS count
+SELECT sender->>'$.email', COUNT(*) AS count
 FROM messages
 WHERE body LIKE '%newsletter%' OR body LIKE '%unsubscribe%'
-GROUP BY sender_email
+GROUP BY sender->>'$.email'
 ORDER BY count DESC;
 ```
 
 ### Show who has sent the largest emails (incl. attachments)
 
 ```sql
-SELECT sender_email, sum(size) AS size
+SELECT sender->>'$.email', sum(size) AS size
 FROM messages
-GROUP BY sender_email
+GROUP BY sender->>'$.email'
 ORDER BY size DESC
 ```
 
