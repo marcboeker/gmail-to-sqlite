@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 from email.utils import parseaddr, parsedate_to_datetime
 
+from bs4 import BeautifulSoup
 from googleapiclient.discovery import build
 from peewee import IntegrityError
 
@@ -52,6 +53,20 @@ def decode_body(part) -> str:
                 return decoded_body
 
     return ""
+
+
+def html2text(html: str) -> str:
+    """
+    Convert HTML to plain text.
+
+    Args:
+        html (str): The HTML to convert.
+
+    Returns:
+        str: The converted HTML.
+    """
+    soup = BeautifulSoup(html, features="html.parser")
+    return soup.get_text()
 
 
 def process_message(service, id: str, exclude_raw=False):
@@ -113,6 +128,12 @@ def process_message(service, id: str, exclude_raw=False):
                 "utf-8"
             )
 
+            if (
+                "mimeType" in msg["payload"]["body"]
+                and msg["payload"]["mimeType"] == "text/html"
+            ):
+                body = html2text(body)
+
     # For multipart messages, get the body from the parts.
     if "parts" in msg["payload"] and len(body) == 0:
         for part in msg["payload"]["parts"]:
@@ -123,6 +144,10 @@ def process_message(service, id: str, exclude_raw=False):
                 or part["mimeType"] == "multipart/alternative"
             ):
                 body = decode_body(part)
+
+                if part["mimeType"] == "text/html":
+                    body = html2text(body)
+
                 if len(body) > 0:
                     break
 
@@ -227,9 +252,9 @@ def sync_messages(credentials, only_new=False, exclude_raw=False) -> int:
     return total_messages
 
 
-def fetch_message(credentials, message_id) -> None:
+def sync_message(credentials, message_id) -> None:
     """
-    Fetches a message from Gmail using the provided credentials and message ID.
+    Syncs a single message from Gmail using the provided credentials and message ID.
 
     Args:
         credentials: The credentials used to authenticate the Gmail API.

@@ -4,7 +4,7 @@ import sys
 
 from auth import get_auth
 from db import Message, init_db
-from messages import fetch_message, sync_messages
+from messages import sync_messages
 
 
 def prepare_data_dir(data_dir: str) -> None:
