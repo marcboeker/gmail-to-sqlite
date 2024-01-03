@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS "messages" (
     "message_id" TEXT NOT NULL, -- Gmail message id
     "thread_id" TEXT NOT NULL, -- Gmail thread id
     "sender" JSON NOT NULL, -- Sender as JSON in the form {"name": "Foo Bar", "email": "foo@example.com"}
-    "recipients" JSON NOT NULL, -- JSON array: [{"email": "foo@example.com", "name": "Foo Bar"}, ...]
+    "recipients" JSON NOT NULL, -- JSON array: [{"email": "foo@example.com", "name": "Foo Bar", "type": "to/cc/bcc"}, ...]
     "subject" TEXT NOT NULL, -- Subject of the email
     "body" TEXT NOT NULL, -- Extracted body either als HTML or plain text
     "labels" JSON NOT NULL, -- JSON array: ["INBOX", "UNREAD", ...]

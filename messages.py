@@ -11,6 +11,28 @@ from db import Message
 MAX_RESULTS = 500
 
 
+def parse_addresses(addresses: str, type: str) -> list:
+    """
+    Parse a list of email addresses.
+
+    Args:
+        addresses (str): The list of email addresses to parse.
+        type (str): The type of the email addresses (to, cc, bcc).
+
+    Returns:
+        list: The parsed email addresses.
+    """
+    parsed_addresses = []
+    for address in addresses.split(";"):
+        name, email = parseaddr(address)
+        if len(email) > 0:
+            parsed_addresses.append(
+                {"email": email.lower(), "name": name, "type": type}
+            )
+
+    return parsed_addresses
+
+
 def decode_body(part) -> str:
     """
     Decode the body of a message part.
@@ -62,9 +84,11 @@ def process_message(service, id: str, exclude_raw=False):
         if name == "from":
             sender_name, sender_email = parseaddr(header["value"])
         elif name == "to":
-            for r in header["value"].split(";"):
-                pr = parseaddr(r)
-                recipients.append({"name": pr[0], "email": pr[1]})
+            recipients.extend(parse_addresses(header["value"], "to"))
+        elif name == "cc":
+            recipients.extend(parse_addresses(header["value"], "cc"))
+        elif name == "bcc":
+            recipients.extend(parse_addresses(header["value"], "bcc"))
         elif name == "subject":
             subject = header["value"]
         elif name == "date":
