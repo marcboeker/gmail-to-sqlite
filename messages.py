@@ -241,8 +241,11 @@ def sync_messages(credentials, only_new=False, exclude_raw=False) -> int:
 
         total_messages += len(messages)
         for i, message in enumerate(messages, start=total_messages - len(messages) + 1):
-            date = process_message(service, message["id"], exclude_raw=exclude_raw)
-            print(f"Syncing message {message['id']} from {date} (Count: {i})")
+            try:
+                date = process_message(service, message["id"], exclude_raw=exclude_raw)
+                print(f"Syncing message {message['id']} from {date} (Count: {i})")
+            except TimeoutError as e:
+                print(f"Could not sync message {message['id']}: {str(e)}")
 
         if "nextPageToken" in results:
             page_token = results["nextPageToken"]
