@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 from peewee import *
 from playhouse.sqlite_ext import *
@@ -49,7 +50,7 @@ class Message(Model):
         db_table = "messages"
 
 
-def init_db(data_dir: str, enable_logging=False) -> SqliteDatabase:
+def init(data_dir: str, enable_logging=False) -> SqliteDatabase:
     """
     Initialize the database for the given data_dir. The database is stored in <data_dir>/messages.db.
 
@@ -70,3 +71,77 @@ def init_db(data_dir: str, enable_logging=False) -> SqliteDatabase:
         logger.addHandler(logging.StreamHandler())
 
     return db
+
+
+def create_message(msg: Message, raw_msg: dict, exclude_raw: bool = False):
+    """
+    Saves a message to the database.
+
+    Args:
+        msg (Message): The message to save.
+    """
+
+    last_indexed = datetime.now()
+    Message.insert(
+        message_id=msg.id,
+        thread_id=msg.thread_id,
+        sender=msg.sender,
+        recipients=msg.recipients,
+        subject=msg.subject,
+        body=msg.body,
+        labels=msg.labels,
+        raw=None if exclude_raw else raw_msg,
+        size=msg.size,
+        timestamp=msg.timestamp,
+        is_read=msg.is_read,
+        is_outgoing=msg.is_outgoing,
+        last_indexed=last_indexed,
+    ).on_conflict(
+        conflict_target=[Message.message_id],
+        preserve=[
+            Message.thread_id,
+            Message.sender,
+            Message.recipients,
+            Message.subject,
+            Message.body,
+            Message.raw,
+            Message.size,
+            Message.timestamp,
+            Message.is_outgoing,
+        ],
+        update={
+            Message.is_read: msg.is_read,
+            Message.last_indexed: last_indexed,
+            Message.labels: msg.labels,
+        },
+    ).execute()
+
+
+def last_indexed() -> datetime:
+    """
+    Returns the timestamp of the last indexed message.
+
+    Returns:
+        datetime: The timestamp of the last indexed message.
+    """
+
+    msg = Message.select().order_by(Message.timestamp.desc()).first()
+    if msg:
+        return datetime.fromisoformat(msg.timestamp)
+    else:
+        return None
+
+
+def first_indexed() -> datetime:
+    """
+    Returns the timestamp of the first indexed message.
+
+    Returns:
+        datetime: The timestamp of the first indexed message.
+    """
+
+    msg = Message.select().order_by(Message.timestamp.asc()).first()
+    if msg:
+        return datetime.fromisoformat(msg.timestamp)
+    else:
+        return None

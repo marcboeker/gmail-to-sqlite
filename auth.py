@@ -8,7 +8,7 @@ SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 OAUTH2_CREDENTIALS = "credentials.json"
 
 
-def get_auth(data_dir: str) -> google.oauth2.credentials.Credentials:
+def get_credentials(data_dir: str) -> google.oauth2.credentials.Credentials:
     """
     Retrieves the authentication credentials for the specified data_dir by either loading
     it from the <data_dir>/credentials.json file or by running the authentication flow.

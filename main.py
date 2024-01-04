@@ -2,9 +2,9 @@ import argparse
 import os
 import sys
 
-from auth import get_auth
-from db import Message, init_db
-from messages import sync_messages
+import auth
+import db
+import sync
 
 
 def prepare_data_dir(data_dir: str) -> None:
@@ -42,10 +42,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     prepare_data_dir(args.data_dir)
-    credentials = get_auth(args.data_dir)
+    credentials = auth.get_credentials(args.data_dir)
 
-    db = init_db(args.data_dir)
+    db = db.init(args.data_dir)
     if args.command == "sync":
-        sync_messages(credentials, only_new=args.only_new, exclude_raw=args.exclude_raw)
+        sync.all_messages(
+            credentials, only_new=args.only_new, exclude_raw=args.exclude_raw
+        )
+        # sync.single_message(
+        #     credentials, "", exclude_raw=args.exclude_raw
+        # )
 
     db.close()
