@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS "messages" (
 SELECT sender->>'$.email', COUNT(*) AS count
 FROM messages
 GROUP BY sender->>'$.email'
-ORDER BY count DESC;
+ORDER BY count DESC
 ```
 
 ### Show the number of unread emails by sender
@@ -84,7 +84,7 @@ SELECT sender->>'$.email', COUNT(*) AS count
 FROM messages
 WHERE is_read = 0
 GROUP BY sender->>'$.email'
-ORDER BY count DESC;
+ORDER BY count DESC
 ```
 
 ### Get the number of emails for a specific period
@@ -99,7 +99,7 @@ ORDER BY count DESC;
 SELECT strftime('%Y', timestamp) AS period, COUNT(*) AS count
 FROM messages
 GROUP BY period
-ORDER BY count DESC;
+ORDER BY count DESC
 ```
 
 ### Find all newsletters and group them by sender
@@ -111,13 +111,13 @@ SELECT sender->>'$.email', COUNT(*) AS count
 FROM messages
 WHERE body LIKE '%newsletter%' OR body LIKE '%unsubscribe%'
 GROUP BY sender->>'$.email'
-ORDER BY count DESC;
+ORDER BY count DESC
 ```
 
-### Show who has sent the largest emails (incl. attachments)
+### Show who has sent the largest emails in MB
 
 ```sql
-SELECT sender->>'$.email', sum(size) AS size
+SELECT sender->>'$.email', sum(size)/1024/1024 AS size
 FROM messages
 GROUP BY sender->>'$.email'
 ORDER BY size DESC
@@ -130,7 +130,7 @@ SELECT count(*)
 FROM messages
 WHERE EXISTS (
   SELECT 1
-  FROM json_each(messages.recipients)
+  FROM json_each(messages.recipients->'$.to')
   WHERE json_extract(value, '$.email') = 'foo@example.com'
 )
 AND sender->>'$.email' = 'foo@example.com'
