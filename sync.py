@@ -9,13 +9,32 @@ import message
 MAX_RESULTS = 500
 
 
-def all_messages(credentials, only_new=False, exclude_raw=False) -> int:
+def get_labels(service) -> dict:
+    """
+    Retrieves all labels from the Gmail API for the authenticated user.
+
+    Args:
+        service (object): The Gmail API service object.
+
+    Returns:
+        dict: A dictionary containing the labels, where the key is the label ID and the value is the label name.
+    """
+
+    # Get all labels
+    labels = {}
+    for label in service.users().labels().list(userId="me").execute()["labels"]:
+        labels[label["id"]] = label["name"]
+
+    return labels
+
+
+def all_messages(credentials, full_sync=False, exclude_raw=False) -> int:
     """
     Fetches messages from the Gmail API using the provided credentials.
 
     Args:
         credentials (object): The credentials object used to authenticate the API request.
-        only_new (bool): Whether to sync only the messages that have not been synced before.
+        full_sync (bool): Whether to do a full sync or not.
         exclude_raw (bool): Whether to store the raw message in the database or not.
 
     Returns:
@@ -23,7 +42,7 @@ def all_messages(credentials, only_new=False, exclude_raw=False) -> int:
     """
 
     query = []
-    if only_new:
+    if not full_sync:
         last = db.last_indexed()
         if last:
             query.append(f"after:{int(last.timestamp())}")
@@ -33,6 +52,8 @@ def all_messages(credentials, only_new=False, exclude_raw=False) -> int:
             query.append(f"before:{int(first.timestamp())}")
 
     service = build("gmail", "v1", credentials=credentials)
+
+    labels = get_labels(service)
 
     page_token = None
     run = True
@@ -49,6 +70,7 @@ def all_messages(credentials, only_new=False, exclude_raw=False) -> int:
             )
             .execute()
         )
+
         messages = results.get("messages", [])
 
         total_messages += len(messages)
@@ -57,7 +79,7 @@ def all_messages(credentials, only_new=False, exclude_raw=False) -> int:
                 raw_msg = (
                     service.users().messages().get(userId="me", id=m["id"]).execute()
                 )
-                msg = message.Message.from_raw(raw_msg)
+                msg = message.Message.from_raw(raw_msg, labels)
                 db.create_message(msg, raw_msg, exclude_raw)
 
             except IntegrityError as e:
@@ -88,13 +110,14 @@ def single_message(credentials, message_id, exclude_raw=False) -> None:
     """
 
     service = build("gmail", "v1", credentials=credentials)
+    labels = get_labels(service)
     try:
         raw_msg = service.users().messages().get(userId="me", id=message_id).execute()
-        msg = message.Message.from_raw(raw_msg)
+        msg = message.Message.from_raw(raw_msg, labels)
         db.create_message(msg, raw_msg, exclude_raw=exclude_raw)
     except IntegrityError as e:
-        print(f"Could not process message {m['id']}: {str(e)}")
+        print(f"Could not process message {message_id}: {str(e)}")
     except TimeoutError as e:
-        print(f"Could not get message from Gmail {m['id']}: {str(e)}")
+        print(f"Could not get message from Gmail {message_id}: {str(e)}")
 
-    print(f"Synced message {msg.id} from {msg.timestamp}")
+    print(f"Synced message {message_id} from {msg.timestamp}")

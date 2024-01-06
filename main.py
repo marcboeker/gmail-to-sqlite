@@ -24,13 +24,13 @@ def prepare_data_dir(data_dir: str) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", help="The command to run: {sync}")
+    parser.add_argument("command", help="The command to run: {sync, sync-message}")
     parser.add_argument(
         "--data-dir", help="The path where the data should be stored", required=True
     )
     parser.add_argument(
-        "--only-new",
-        help="Fetch only the messages that have not been synced before",
+        "--full-sync",
+        help="Force a full sync of all messages",
         action="store_true",
     )
     parser.add_argument(
@@ -38,19 +38,25 @@ if __name__ == "__main__":
         help="Do not store raw messages in the database",
         action="store_true",
     )
+    parser.add_argument(
+        "--message-id",
+        help="The ID of the message to sync",
+    )
 
     args = parser.parse_args()
 
     prepare_data_dir(args.data_dir)
     credentials = auth.get_credentials(args.data_dir)
 
-    db = db.init(args.data_dir)
+    db_conn = db.init(args.data_dir)
     if args.command == "sync":
         sync.all_messages(
-            credentials, only_new=args.only_new, exclude_raw=args.exclude_raw
+            credentials, full_sync=args.full_sync, exclude_raw=args.exclude_raw
         )
-        # sync.single_message(
-        #     credentials, "", exclude_raw=args.exclude_raw
-        # )
+    elif args.command == "sync-message":
+        if args.message_id is None:
+            print("Please provide a message ID")
+            sys.exit(1)
+        sync.single_message(credentials, args.message_id, exclude_raw=args.exclude_raw)
 
-    db.close()
+    db_conn.close()

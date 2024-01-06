@@ -16,10 +16,9 @@ class Message(Model):
         thread_id (TextField): The unique identifier of the thread.
         sender (JSONField): The sender of the message.
         recipients (JSONField): The recipients of the message.
-        subject (TextField): The subject of the message.
-        body (TextField): The body of the message.
         labels (JSONField): The labels of the message.
-        raw (JSONField): The raw data of the message.
+        subject (TextField): The subject of the message.
+        body (TextField): The last messages sent or received without all other replies to the thread.
         size (IntegerField): The size of the message.
         timestamp (DateTimeField): The timestamp of the message.
         is_read (BooleanField): Indicates whether the message has been read.
@@ -35,10 +34,9 @@ class Message(Model):
     thread_id = TextField()
     sender = JSONField()
     recipients = JSONField()
-    subject = TextField()
-    body = TextField()
     labels = JSONField()
-    raw = JSONField(null=True)
+    subject = TextField(null=True)
+    body = TextField(null=True)
     size = IntegerField()
     timestamp = DateTimeField()
     is_read = BooleanField()
@@ -87,10 +85,9 @@ def create_message(msg: Message, raw_msg: dict, exclude_raw: bool = False):
         thread_id=msg.thread_id,
         sender=msg.sender,
         recipients=msg.recipients,
+        labels=msg.labels,
         subject=msg.subject,
         body=msg.body,
-        labels=msg.labels,
-        raw=None if exclude_raw else raw_msg,
         size=msg.size,
         timestamp=msg.timestamp,
         is_read=msg.is_read,
@@ -104,7 +101,6 @@ def create_message(msg: Message, raw_msg: dict, exclude_raw: bool = False):
             Message.recipients,
             Message.subject,
             Message.body,
-            Message.raw,
             Message.size,
             Message.timestamp,
             Message.is_outgoing,

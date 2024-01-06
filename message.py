@@ -9,49 +9,49 @@ class Message:
         self.id = None
         self.thread_id = None
         self.sender = {}
-        self.recipients = []
+        self.recipients = {}
+        self.labels = []
         self.subject = None
         self.body = None
+        self.raw = None
         self.size = 0
         self.timestamp = None
         self.is_read = False
         self.is_outgoing = False
 
     @classmethod
-    def from_raw(cls, raw: dict):
+    def from_raw(cls, raw: dict, labels: dict):
         """
         Create a Message object from a raw message.
 
         Args:
             raw (dict): The raw message.
+            labels (dict): The label map.
 
         Returns:
             Message: The Message object.
         """
 
         msg = cls()
-        msg.parse(raw)
+        msg.parse(raw, labels)
         return msg
 
-    def parse_addresses(self, addresses: str, type: str) -> list:
+    def parse_addresses(self, addresses: str) -> list:
         """
         Parse a list of email addresses.
 
         Args:
             addresses (str): The list of email addresses to parse.
-            type (str): The type of the email addresses (to, cc, bcc).
 
         Returns:
             list: The parsed email addresses.
         """
 
         parsed_addresses = []
-        for address in addresses.split(";"):
+        for address in addresses.split(","):
             name, email = parseaddr(address)
             if len(email) > 0:
-                parsed_addresses.append(
-                    {"email": email.lower(), "name": name, "type": type}
-                )
+                parsed_addresses.append({"email": email.lower(), "name": name})
 
         return parsed_addresses
 
@@ -90,12 +90,13 @@ class Message:
         soup = BeautifulSoup(html, features="html.parser")
         return soup.get_text()
 
-    def parse(self, msg: dict) -> None:
+    def parse(self, msg: dict, labels: dict) -> None:
         """
         Parses a raw message.
 
         Args:
             msg (dict): The message to process.
+            labels (dict): The label map.
 
         Returns:
             None
@@ -112,11 +113,11 @@ class Message:
                 addr = parseaddr(value)
                 self.sender = {"name": addr[0], "email": addr[1]}
             elif name == "to":
-                self.recipients.extend(self.parse_addresses(value, "to"))
+                self.recipients["to"] = self.parse_addresses(value)
             elif name == "cc":
-                self.recipients.extend(self.parse_addresses(value, "cc"))
+                self.recipients["cc"] = self.parse_addresses(value)
             elif name == "bcc":
-                self.recipients.extend(self.parse_addresses(value, "bcc"))
+                self.recipients["bcc"] = self.parse_addresses(value)
             elif name == "subject":
                 self.subject = value
             elif name == "date":
@@ -124,14 +125,11 @@ class Message:
 
         # Labels
         if "labelIds" in msg:
-            self.labels = msg["labelIds"]
-            if "UNREAD" in self.labels:
-                self.is_read = False
-            else:
-                self.is_read = True
+            for l in msg["labelIds"]:
+                self.labels.append(labels[l])
 
-            if "SENT" in self.labels:
-                self.is_outgoing = True
+            self.is_read = "UNREAD" not in msg["labelIds"]
+            self.is_outgoing = "SENT" in msg["labelIds"]
 
         # Extract body
         # For non multipart messages, use the body from the message directly.
@@ -141,11 +139,7 @@ class Message:
                     msg["payload"]["body"]["data"]
                 ).decode("utf-8")
 
-                if (
-                    "mimeType" in msg["payload"]["body"]
-                    and msg["payload"]["mimeType"] == "text/html"
-                ):
-                    self.body = self.html2text(self.body)
+                self.body = self.html2text(self.body)
 
         # For multipart messages, get the body from the parts.
         if "parts" in msg["payload"] and self.body is None:
@@ -157,9 +151,7 @@ class Message:
                     or part["mimeType"] == "multipart/alternative"
                 ):
                     self.body = self.decode_body(part)
-
-                    if part["mimeType"] == "text/html":
-                        self.body = self.html2text(self.body)
+                    self.body = self.html2text(self.body)
 
                     if len(self.body) > 0:
                         break
