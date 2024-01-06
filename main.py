@@ -34,11 +34,6 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--exclude-raw",
-        help="Do not store raw messages in the database",
-        action="store_true",
-    )
-    parser.add_argument(
         "--message-id",
         help="The ID of the message to sync",
     )
@@ -50,13 +45,11 @@ if __name__ == "__main__":
 
     db_conn = db.init(args.data_dir)
     if args.command == "sync":
-        sync.all_messages(
-            credentials, full_sync=args.full_sync, exclude_raw=args.exclude_raw
-        )
+        sync.all_messages(credentials, full_sync=args.full_sync)
     elif args.command == "sync-message":
         if args.message_id is None:
             print("Please provide a message ID")
             sys.exit(1)
-        sync.single_message(credentials, args.message_id, exclude_raw=args.exclude_raw)
+        sync.single_message(credentials, args.message_id)
 
     db_conn.close()

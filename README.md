@@ -37,7 +37,6 @@ sync-message            Sync a single message from Gmail to the database.
 --data-dir DATA_DIR     Path to the directory where all data is stored.
 --full-sync             Force a full sync.
 --message-id MESSAGE_ID Sync only the message with the given message id.
---exclude-raw           Do not store the raw message in the database.
 ```
 
 ## Schema

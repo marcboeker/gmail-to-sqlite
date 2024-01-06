@@ -13,7 +13,6 @@ class Message:
         self.labels = []
         self.subject = None
         self.body = None
-        self.raw = None
         self.size = 0
         self.timestamp = None
         self.is_read = False

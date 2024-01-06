@@ -71,7 +71,7 @@ def init(data_dir: str, enable_logging=False) -> SqliteDatabase:
     return db
 
 
-def create_message(msg: Message, raw_msg: dict, exclude_raw: bool = False):
+def create_message(msg: Message):
     """
     Saves a message to the database.
 

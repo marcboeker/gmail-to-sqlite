@@ -28,14 +28,13 @@ def get_labels(service) -> dict:
     return labels
 
 
-def all_messages(credentials, full_sync=False, exclude_raw=False) -> int:
+def all_messages(credentials, full_sync=False) -> int:
     """
     Fetches messages from the Gmail API using the provided credentials.
 
     Args:
         credentials (object): The credentials object used to authenticate the API request.
         full_sync (bool): Whether to do a full sync or not.
-        exclude_raw (bool): Whether to store the raw message in the database or not.
 
     Returns:
         int: The number of messages fetched.
@@ -80,7 +79,7 @@ def all_messages(credentials, full_sync=False, exclude_raw=False) -> int:
                     service.users().messages().get(userId="me", id=m["id"]).execute()
                 )
                 msg = message.Message.from_raw(raw_msg, labels)
-                db.create_message(msg, raw_msg, exclude_raw)
+                db.create_message(msg)
 
             except IntegrityError as e:
                 print(f"Could not process message {m['id']}: {str(e)}")
@@ -97,7 +96,7 @@ def all_messages(credentials, full_sync=False, exclude_raw=False) -> int:
     return total_messages
 
 
-def single_message(credentials, message_id, exclude_raw=False) -> None:
+def single_message(credentials, message_id: str) -> None:
     """
     Syncs a single message from Gmail using the provided credentials and message ID.
 
@@ -114,7 +113,7 @@ def single_message(credentials, message_id, exclude_raw=False) -> None:
     try:
         raw_msg = service.users().messages().get(userId="me", id=message_id).execute()
         msg = message.Message.from_raw(raw_msg, labels)
-        db.create_message(msg, raw_msg, exclude_raw=exclude_raw)
+        db.create_message(msg)
     except IntegrityError as e:
         print(f"Could not process message {message_id}: {str(e)}")
     except TimeoutError as e:
