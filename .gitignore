@@ -1,4 +1,5 @@
 credentials.json
+token.json
 *.db
 .venv
 __pycache__

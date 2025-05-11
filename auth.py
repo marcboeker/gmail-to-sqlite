@@ -25,13 +25,13 @@ def get_credentials(data_dir: str) -> google.oauth2.credentials.Credentials:
 
     flow = InstalledAppFlow.from_client_secrets_file(OAUTH2_CREDENTIALS, SCOPES)
 
-    credentials_file = f"{data_dir}/credentials.json"
-    if not os.path.exists(credentials_file):
+    stored_token_file = f"{data_dir}/token.json"
+    if not os.path.exists(stored_token_file):
         credentials = flow.run_local_server(port=0)
-        with open(credentials_file, "w") as f:
+        with open(stored_token_file, "w") as f:
             f.write(credentials.to_json())
     else:
-        with open(credentials_file, "r") as f:
+        with open(stored_token_file, "r") as f:
             credentials_dict = json.load(f)
         credentials = google.oauth2.credentials.Credentials.from_authorized_user_info(
             credentials_dict
