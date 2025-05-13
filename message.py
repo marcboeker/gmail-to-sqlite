@@ -1,7 +1,7 @@
 import base64
 from email.utils import parseaddr, parsedate_to_datetime
-
 from bs4 import BeautifulSoup
+from dateutil import parser as dateutil_parser  # Add this import
 
 
 class Message:
@@ -120,7 +120,13 @@ class Message:
             elif name == "subject":
                 self.subject = value
             elif name == "date":
-                self.timestamp = parsedate_to_datetime(value)
+                try:
+                    self.timestamp = parsedate_to_datetime(value)
+                except Exception:
+                    try:
+                        self.timestamp = dateutil_parser.parse(value)
+                    except Exception:
+                        self.timestamp = None  # Or handle/log as needed
 
         # Labels
         if "labelIds" in msg:

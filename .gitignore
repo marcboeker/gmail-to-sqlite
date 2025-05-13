@@ -4,3 +4,5 @@ credentials.json
 __pycache__
 .vscode
 demo.py
+gmail-data/
+.gitignore
