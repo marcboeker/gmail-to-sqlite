@@ -2,9 +2,9 @@ import argparse
 import os
 import sys
 
-import auth
-import db
-import sync
+from . import auth
+from . import db
+from . import sync
 
 
 def prepare_data_dir(data_dir: str) -> None:
@@ -22,7 +22,7 @@ def prepare_data_dir(data_dir: str) -> None:
         os.makedirs(data_dir)
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("command", help="The command to run: {sync, sync-message}")
     parser.add_argument(

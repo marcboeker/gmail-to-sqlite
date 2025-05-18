@@ -3,8 +3,8 @@ from email.utils import parseaddr, parsedate_to_datetime
 from googleapiclient.discovery import build
 from peewee import IntegrityError
 
-import db
-import message
+from . import db
+from . import message
 
 MAX_RESULTS = 500
 
