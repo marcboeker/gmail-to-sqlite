@@ -4,3 +4,6 @@ credentials.json
 __pycache__
 .vscode
 demo.py
+.direnv
+**/*.egg-info
+result
