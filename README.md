@@ -37,15 +37,19 @@ a detailed guide on how to create the credentials:
 
 ## Commandline parameters
 
-    usage: main.py [-h] [--data-dir DATA_DIR] [--update] {sync, sync-message}
+    usage: gmail_to_sqlite [-h] --data-dir DATA_DIR [--full-sync] [--message-id MESSAGE_ID] [--clobber [CLOBBER ...]] command
 
-    Main commands:
-    sync                    Sync emails from Gmail to the database.
-    sync-message            Sync a single message from Gmail to the database.
+    positional arguments:
+      command                  The command to run: {sync, sync-message}
 
-    --data-dir DATA_DIR     Path to the directory where all data is stored.
-    --full-sync             Force a full sync.
-    --message-id MESSAGE_ID Sync only the message with the given message id.
+    options:
+      -h, --help               show this help message and exit
+      --data-dir DATA_DIR      The path where the data should be stored
+      --full-sync              Force a full sync of all messages
+      --message-id MESSAGE_ID  The ID of the message to sync
+      --clobber [CLOBBER ...]  attributes to clobber. Options: thread_id,
+                               sender, recipients, subject, body, size, 
+                               timestamp, is_outgoing, is_read, labels
 
 
 ## Schema
