@@ -1,5 +1,3 @@
-from email.utils import parseaddr, parsedate_to_datetime
-
 from googleapiclient.discovery import build
 from peewee import IntegrityError
 
@@ -28,7 +26,7 @@ def get_labels(service) -> dict:
     return labels
 
 
-def all_messages(credentials, full_sync=False) -> int:
+def all_messages(credentials, full_sync=False, clobber=[]) -> int:
     """
     Fetches messages from the Gmail API using the provided credentials.
 
@@ -79,7 +77,7 @@ def all_messages(credentials, full_sync=False) -> int:
                     service.users().messages().get(userId="me", id=m["id"]).execute()
                 )
                 msg = message.Message.from_raw(raw_msg, labels)
-                db.create_message(msg)
+                db.create_message(msg, clobber)
 
             except IntegrityError as e:
                 print(f"Could not process message {m['id']}: {str(e)}")
@@ -96,7 +94,7 @@ def all_messages(credentials, full_sync=False) -> int:
     return total_messages
 
 
-def single_message(credentials, message_id: str) -> None:
+def single_message(credentials, message_id: str, clobber=[]) -> None:
     """
     Syncs a single message from Gmail using the provided credentials and message ID.
 
@@ -113,7 +111,7 @@ def single_message(credentials, message_id: str) -> None:
     try:
         raw_msg = service.users().messages().get(userId="me", id=message_id).execute()
         msg = message.Message.from_raw(raw_msg, labels)
-        db.create_message(msg)
+        db.create_message(msg, clobber)
     except IntegrityError as e:
         print(f"Could not process message {message_id}: {str(e)}")
     except TimeoutError as e:

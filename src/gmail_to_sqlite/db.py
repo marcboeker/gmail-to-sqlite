@@ -71,7 +71,7 @@ def init(data_dir: str, enable_logging=False) -> SqliteDatabase:
     return db
 
 
-def create_message(msg: Message):
+def create_message(msg: Message, clobber=[]):
     """
     Saves a message to the database.
 
@@ -95,20 +95,22 @@ def create_message(msg: Message):
         last_indexed=last_indexed,
     ).on_conflict(
         conflict_target=[Message.message_id],
-        preserve=[
-            Message.thread_id,
-            Message.sender,
-            Message.recipients,
-            Message.subject,
-            Message.body,
-            Message.size,
-            Message.timestamp,
-            Message.is_outgoing,
-        ],
+        # weirdly, "preserve" means almost the opposite of what you'd expect.
+        # It preserves the value from the *INSERTED* row, not the original row.
+        # So our "clobber" is the same as playhouse "preserve".
+        preserve=[] +
+        ([Message.thread_id] if "thread_id" in clobber else []) + 
+        ([Message.sender] if "sender" in clobber else []) + 
+        ([Message.recipients] if "recipients" in clobber else []) + 
+        ([Message.subject] if "subject" in clobber else []) +
+        ([Message.body] if "body" in clobber else []) +
+        ([Message.size] if "size" in clobber else []) +
+        ([Message.timestamp] if "timestamp" in clobber else []) +
+        ([Message.is_outgoing] if "is_outgoing" in clobber else []) +
+        ([Message.is_read] if "is_read" in clobber else []) +
+        ([Message.labels] if "labels" in clobber else []) ,
         update={
-            Message.is_read: msg.is_read,
             Message.last_indexed: last_indexed,
-            Message.labels: msg.labels,
         },
     ).execute()
 

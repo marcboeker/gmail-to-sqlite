@@ -38,6 +38,14 @@ def main():
         help="The ID of the message to sync",
     )
 
+    parser.add_argument(
+        "--clobber",
+        help="attributes to clobber. Options: " +
+             "thread_id, sender, recipients, subject, body, size, timestamp, is_outgoing, " +
+             "is_read, labels",
+        nargs="*"
+    )
+
     args = parser.parse_args()
 
     prepare_data_dir(args.data_dir)
@@ -45,11 +53,11 @@ def main():
 
     db_conn = db.init(args.data_dir)
     if args.command == "sync":
-        sync.all_messages(credentials, full_sync=args.full_sync)
+        sync.all_messages(credentials, full_sync=args.full_sync, clobber=args.clobber or [])
     elif args.command == "sync-message":
         if args.message_id is None:
             print("Please provide a message ID")
             sys.exit(1)
-        sync.single_message(credentials, args.message_id)
+        sync.single_message(credentials, args.message_id, clobber=args.clobber or [])
 
     db_conn.close()
