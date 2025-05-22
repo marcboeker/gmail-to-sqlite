@@ -1,4 +1,6 @@
 credentials.json
+token.json
+imap_credentials.json
 *.db
 .venv
 __pycache__
@@ -7,3 +9,4 @@ demo.py
 .direnv
 **/*.egg-info
 result
+*.lec

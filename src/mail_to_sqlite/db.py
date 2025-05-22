@@ -31,7 +31,7 @@ class Message(Model):
     """
 
     message_id = TextField(unique=True)
-    thread_id = TextField()
+    thread_id = TextField(null=True)
     sender = JSONField()
     recipients = JSONField()
     labels = JSONField()

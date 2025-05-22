@@ -24,9 +24,14 @@ def prepare_data_dir(data_dir: str) -> None:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", help="The command to run: {sync, sync-message}")
     parser.add_argument(
         "--data-dir", help="The path where the data should be stored", required=True
+    )
+    parser.add_argument(
+        "--provider", 
+        help="Email provider to use (gmail or imap)",
+        default="gmail",
+        choices=["gmail", "imap"]
     )
     parser.add_argument(
         "--full-sync",
@@ -35,9 +40,8 @@ def main():
     )
     parser.add_argument(
         "--message-id",
-        help="The ID of the message to sync",
+        help="The ID of a single message to sync",
     )
-
     parser.add_argument(
         "--clobber",
         help="attributes to clobber. Options: " +
@@ -49,15 +53,13 @@ def main():
     args = parser.parse_args()
 
     prepare_data_dir(args.data_dir)
-    credentials = auth.get_credentials(args.data_dir)
-
     db_conn = db.init(args.data_dir)
-    if args.command == "sync":
-        sync.all_messages(credentials, full_sync=args.full_sync, clobber=args.clobber or [])
-    elif args.command == "sync-message":
-        if args.message_id is None:
-            print("Please provide a message ID")
-            sys.exit(1)
-        sync.single_message(credentials, args.message_id, clobber=args.clobber or [])
+    
+    if args.message_id is None:
+        sync.all_messages(args.provider, args.data_dir, full_sync=args.full_sync, 
+                         clobber=args.clobber or [])
+    else: 
+        sync.single_message(args.provider, args.data_dir, args.message_id, 
+                          clobber=args.clobber or [])
 
     db_conn.close()

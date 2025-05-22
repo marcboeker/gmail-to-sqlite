@@ -19,20 +19,24 @@ class Message:
         self.is_outgoing = False
 
     @classmethod
-    def from_raw(cls, raw: dict, labels: dict):
+    def from_raw(cls, raw: dict, labels: dict, provider: str = "gmail"):
         """
         Create a Message object from a raw message.
 
         Args:
             raw (dict): The raw message.
             labels (dict): The label map.
+            provider (str): The provider type ('gmail' or 'imap').
 
         Returns:
             Message: The Message object.
         """
 
         msg = cls()
-        msg.parse(raw, labels)
+        if provider == "gmail":
+            msg.parse(raw, labels)
+        # For IMAP, parsing is done in the IMAPProvider class directly
+            
         return msg
 
     def parse_addresses(self, addresses: str) -> list:

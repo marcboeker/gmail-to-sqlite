@@ -24,7 +24,10 @@
   };
   outputs = { self, nixpkgs, utils, pyproject-nix, uv2nix, pyproject-build-systems }: utils.lib.eachDefaultSystem (system:
     let
+      inherit (nixpkgs) lib;
+
       pkgs = nixpkgs.legacyPackages.${system};
+
       workspace = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = ./.; };
 
 
@@ -52,7 +55,24 @@
 
       
       python = pkgs.python313;
-      
+
+      uvWrapped = pkgs.stdenv.mkDerivation {
+        name = "uv-wrapped";
+        nativeBuildInputs = [pkgs.makeWrapper];
+        buildCommand = if pkgs.stdenv.isLinux then ''
+        mkdir $out
+        makeWrapper ${pkgs.uv}/bin/uv $out/bin/uv \
+        --prefix UV_PYTHON_DOWNLOADS : "never" \
+        --prefix UV_PYTHON : "${python.interpreter}" \
+        --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath pkgs.pythonManylinuxPackages.manylinux1}"
+        '' else ''
+        mkdir $out
+        makeWrapper ${pkgs.uv}/bin/uv $out/bin/uv \
+        --prefix UV_PYTHON_DOWNLOADS : "never" \
+        --prefix UV_PYTHON : "${python.interpreter}"
+        '';
+      };
+
       pythonSet =
         # Use base package set from pyproject.nix builders
         (pkgs.callPackage pyproject-nix.build.packages {
@@ -69,16 +89,16 @@
         inherit (pkgs.callPackages pyproject-nix.build.util { }) mkApplication;
     in
     {
-      packages.venv = pythonSet.mkVirtualEnv "gmail-to-sqlite" workspace.deps.default;
+      packages.venv = pythonSet.mkVirtualEnv "mail-to-sqlite" workspace.deps.default;
 
       packages.default = mkApplication {
         venv = self.packages.${system}.venv;
-        package = pythonSet.gmail-to-sqlite;
+        package = pythonSet.mail-to-sqlite;
       };
 
       devShell = pkgs.mkShell {
         buildInputs = with pkgs; [
-          uv
+          uvWrapped
         ];
       };
     }

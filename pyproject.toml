@@ -1,5 +1,5 @@
 [project]
-name="gmail-to-sqlite"
+name="mail-to-sqlite"
 version="0.0.0"
 requires-python = ">=3.13"
 dependencies = [
@@ -31,4 +31,7 @@ dependencies = [
 ]
 
 [project.scripts]
-gmail_to_sqlite = "gmail_to_sqlite:main.main"
+mail_to_sqlite = "mail_to_sqlite:main.main"
+
+[tool.uv]
+package = true

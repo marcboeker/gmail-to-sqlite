@@ -1,159 +1,197 @@
-# Gmail to SQLite
+# Mail to SQLite
 
-This is a script to download emails from Gmail and store them in a SQLite 
-database for further analysis. I find it extremely useful to have all my emails 
-in a database to run queries on them. For example, I can find out how many 
-emails I received per sender, which emails take the most space, and which 
-emails from which sender I never read.
+This is a loosely-coded just-for-fun script to download emails from a variety 
+of providers and store them in a SQLite database for further analysis. It's 
+useful if you want to run SQL queries against your email (and who doesn't!) 
+It's also useful for hooking up an LLM with email, with a minimum of fuss. Try 
+combining it with [lectic](https://github.com/gleachkr/lectic), which has 
+built-in SQLite support.
 
 ## Installation
 
-1. With nix: `nix profile install github:gleachkr/gmail-to-sqlite`. Then run 
-   with `gmail_to_sqlite`.
-2. With pip: if you want to do this, just post an issue and I'll make it 
-   possible.
+1. With nix: `nix profile install github:gleachkr/mail-to-sqlite`. 
+   After installation, the command `mail_to_sqlite` will be available.
 
-You will also need OAuth credentials from google, for a *Desktop App*. Here is 
-a detailed guide on how to create the credentials: 
-[https://developers.google.com/gmail/api/quickstart/python#set_up_your_environment](https://developers.google.com/gmail/api/quickstart/python#set_up_your_environment).
+2. With pip: if you want to do this, just post an issue and I'll make 
+   it possible.
+
+## Authentication Setup
+
+### For Gmail
+
+You'll need OAuth credentials from Google for a *Desktop App*:
+
+1. Visit the [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Enable the Gmail API for your project
+4. Create OAuth credentials for a Desktop application
+5. Download the credentials JSON file, and keep it in your `--data-dir` 
+   (see below)
+
+For detailed instructions, follow Google's [Python Quickstart 
+Guide](https://developers.google.com/gmail/api/quickstart/python#set_up_your_environment).
+
+### For IMAP Providers
+
+For IMAP servers, you'll need:
+- Server address and port
+- Your username/email
+- Your password or an app-specific password
+
+Put them in a JSON file called imap_credentials.json, and keep that in 
+the `--data-dir` that you pass to the program.
 
 ## Usage
 
-### Sync all emails
+### Basic Command Structure
 
-1. Run the script: `gmail_to_sqlite sync --data-dir path/to/your/data` where 
-   `--<data-dir>` is the path where all data is stored. This creates a SQLite 
-   database in `<data-dir>/messages.db` and stores the user credentials under 
-   `<data-dir>/credentials.json`.
-2. After the script has finished, you can query the database using, for 
-   example, the `sqlite3` command line tool: `sqlite3 <data-dir>/messages.db`.
-3. You can run the script again to sync all new messages. Provide `--full-sync` 
-   to force a full sync. However, this will only update the read status, the 
-   labels, and the last indexed timestamp for existing messages.
+```
+mail_to_sqlite COMMAND [OPTIONS]
+```
 
-### Sync a single message
+### Syncing All Messages
 
-    gmail_to_sqlite sync-message --data-dir path/to/your/data --message-id <message-id>
+```
+mail_to_sqlite --data-dir PATH/TO/DATA --provider [gmail|imap]
+```
 
-## Commandline parameters
+This creates and updates a SQLite database at `PATH/TO/DATA/messages.db`. On 
+the first sync it will pull down everything. Subsequent syncs are incremental 
+(IMAP only lets you specify a time range with day-level granularity though, so 
+you might still pull down some already downloaded emails).
 
-    usage: gmail_to_sqlite [-h] --data-dir DATA_DIR [--full-sync] [--message-id MESSAGE_ID] [--clobber [CLOBBER ...]] command
+### Syncing a Single Message
 
-    positional arguments:
-      command                  The command to run: {sync, sync-message}
+```
+mail_to_sqlite sync-message --data-dir PATH/TO/DATA --message-id MESSAGE_ID
+```
 
-    options:
-      -h, --help               show this help message and exit
-      --data-dir DATA_DIR      The path where the data should be stored
-      --full-sync              Force a full sync of all messages
-      --message-id MESSAGE_ID  The ID of the message to sync
-      --clobber [CLOBBER ...]  attributes to clobber. Options: thread_id,
-                               sender, recipients, subject, body, size, 
-                               timestamp, is_outgoing, is_read, labels
+### Command-line Parameters
 
+```
+usage: mail_to_sqlite [-h] --data-dir DATA_DIR [--full-sync] 
+                      [--message-id MESSAGE_ID] [--clobber [ATTR ...]]
+                      [--provider {gmail,imap}]
 
-## Schema
+positional arguments:
+  command                The command to run: {sync, sync-message}
+
+options:
+  -h, --help                Show this help message and exit
+  --data-dir DATA_DIR       Directory where data should be stored
+  --full-sync               Force a full sync of all messages
+  --message-id MESSAGE_ID   The ID of the message to sync
+  --clobber [ATTR ...]      Attributes to overwrite on existing messages
+  --provider {gmail,imap}   Email provider to use (default: gmail)
+```
+
+## Database Schema
 
 ```sql
 CREATE TABLE IF NOT EXISTS "messages" (
-    "id" INTEGER NOT NULL PRIMARY KEY, -- internal id
-    "message_id" TEXT NOT NULL, -- Gmail message id
-    "thread_id" TEXT NOT NULL, -- Gmail thread id
-    "sender" JSON NOT NULL, -- Sender as JSON in the form {"name": "Foo Bar", "email": "foo@example.com"}
-    "recipients" JSON NOT NULL, -- JSON object: {
-      -- "to": [{"email": "foo@example.com", "name": "Foo Bar"}, ...],
-      -- "cc": [{"email": "foo@example.com", "name": "Foo Bar"}, ...],
-      -- "bcc": [{"email": "foo@example.com", "name": "Foo Bar"}, ...]
-    --}
-    "labels" JSON NOT NULL, -- JSON array: ["INBOX", "UNREAD", ...]
-    "subject" TEXT NOT NULL, -- Subject of the email
-    "body" TEXT NOT NULL, -- Extracted body either als HTML or plain text
-    "size" INTEGER NOT NULL, -- Size reported by Gmail
-    "timestamp" DATETIME NOT NULL, -- When the email was sent/received
-    "is_read" INTEGER NOT NULL, -- 0=Unread, 1=Read
-    "is_outgoing" INTEGER NOT NULL, -- 0=Incoming, 1=Outgoing
-    "last_indexed" DATETIME NOT NULL -- Timestamp when the email was last seen on the server
+    "id" INTEGER NOT NULL PRIMARY KEY, 
+    "message_id" TEXT NOT NULL,
+    "thread_id" TEXT NOT NULL,
+    "sender" JSON NOT NULL, 
+    "recipients" JSON NOT NULL,
+    "labels" JSON NOT NULL,
+    "subject" TEXT NOT NULL,
+    "body" TEXT NOT NULL,
+    "size" INTEGER NOT NULL,
+    "timestamp" DATETIME NOT NULL,
+    "is_read" INTEGER NOT NULL,
+    "is_outgoing" INTEGER NOT NULL,
+    "last_indexed" DATETIME NOT NULL
 );
 ```
 
-## Example queries
+## Example Queries
 
-### Get the number of emails per sender
+### Most Frequent Senders
 
 ```sql
 SELECT sender->>'$.email', COUNT(*) AS count
 FROM messages
 GROUP BY sender->>'$.email'
 ORDER BY count DESC
+LIMIT 20;
 ```
 
-### Show the number of unread emails by sender
-
-This is great to determine who is spamming you the most with uninteresting emails.
+### Unread Emails by Sender
 
 ```sql
 SELECT sender->>'$.email', COUNT(*) AS count
 FROM messages
 WHERE is_read = 0
 GROUP BY sender->>'$.email'
-ORDER BY count DESC
+ORDER BY count DESC;
 ```
 
-### Get the number of emails for a specific period
-
-- For years: `strftime('%Y', timestamp)`
-- For months in a year: `strftime('%m', timestamp)`
-- For days in a month: `strftime('%d', timestamp)`
-- For weekdays: `strftime('%w', timestamp)`
-- For hours in a day: `strftime('%H', timestamp)`
+### Email Volume by Time Period
 
 ```sql
-SELECT strftime('%Y', timestamp) AS period, COUNT(*) AS count
+-- For yearly statistics
+SELECT strftime('%Y', timestamp) AS year, COUNT(*) AS count
 FROM messages
-GROUP BY period
-ORDER BY count DESC
+GROUP BY year
+ORDER BY year DESC;
 ```
 
-### Find all newsletters and group them by sender
+### Storage Usage by Sender (MB)
 
-This is an amateurish way to find all newsletters and group them by sender. It's not perfect, but it's a start. You could also use
+```sql
+SELECT sender->>'$.email', sum(size)/1024/1024 AS size_mb
+FROM messages
+GROUP BY sender->>'$.email'
+ORDER BY size_mb DESC
+LIMIT 20;
+```
+
+### Potential Newsletters
 
 ```sql
 SELECT sender->>'$.email', COUNT(*) AS count
 FROM messages
-WHERE body LIKE '%newsletter%' OR body LIKE '%unsubscribe%'
+WHERE body LIKE '%unsubscribe%' 
 GROUP BY sender->>'$.email'
-ORDER BY count DESC
+ORDER BY count DESC;
 ```
 
-### Show who has sent the largest emails in MB
-
-```sql
-SELECT sender->>'$.email', sum(size)/1024/1024 AS size
-FROM messages
-GROUP BY sender->>'$.email'
-ORDER BY size DESC
-```
-
-### Count the number of emails that I have sent to myself
+### Self-Emails
 
 ```sql
 SELECT count(*)
 FROM messages
-WHERE EXISTS (
-  SELECT 1
+WHERE json_extract(sender, '$.email') IN (
+  SELECT json_extract(value, '$.email')
   FROM json_each(messages.recipients->'$.to')
-  WHERE json_extract(value, '$.email') = 'foo@example.com'
-)
-AND sender->>'$.email' = 'foo@example.com'
+);
 ```
 
-### List the senders who have sent me the largest total volume of emails in megabytes
+## Advanced Usage
 
-```sql
-SELECT sender->>'$.email', sum(size)/1024/1024 as total_size
-FROM messages
-WHERE is_outgoing=false
-GROUP BY sender->>'$.email'
-ORDER BY total_size DESC
+### Targeted Sync with Specific Fields
+
+If you want to update only specific attributes of existing messages:
+
 ```
+mail_to_sqlite sync --data-dir PATH/TO/DATA --clobber labels is_read
+```
+
+### Periodic Syncing
+
+For regular updates, consider setting up a cron job:
+
+```
+# Update email database every hour
+0 * * * * mail_to_sqlite sync --data-dir ~/mail-data
+```
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for 
+details. Thanks to @marcboeker for [the original 
+gmail-to-sqlite](https://github.com/marcboeker/gmail-to-sqlite).
