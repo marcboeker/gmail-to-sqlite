@@ -161,6 +161,7 @@ def all_messages(
         all_message_ids = []
         page_token = None
         run = True
+        collected_count = 0
         logging.info("Collecting all message IDs...")
         while run and not (check_shutdown and check_shutdown()):
             try:
@@ -180,6 +181,9 @@ def all_messages(
                 messages_page = results.get("messages", [])
                 for m_info in messages_page:
                     all_message_ids.append(m_info["id"])
+                    collected_count += 1
+                    if collected_count % 100 == 0:
+                        print(f"Collected {collected_count} message IDs so far...")
 
                 if "nextPageToken" in results:
                     page_token = results["nextPageToken"]
@@ -194,7 +198,7 @@ def all_messages(
             )
             return 0
 
-        logging.info(f"Found {len(all_message_ids)} messages to sync.")
+        logging.info(f"Found {len(all_message_ids)} messages to sync. (Collected {collected_count} message IDs total)")
 
         total_synced_count = 0
         processed_count = 0
