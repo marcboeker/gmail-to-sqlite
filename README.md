@@ -6,14 +6,16 @@ This is a script to download emails from Gmail and store them in a SQLite databa
 
 1. Clone this repository: `git clone https://github.com/marcboeker/gmail-to-sqlite.git`.
 2. Install the requirements using `uv`:
-    *   First, install `uv` if you haven't already. You can find instructions on the [official uv documentation](https://github.com/astral-sh/uv#installation). A common method is using pip:
-        ```bash
-        pip install uv
-        ```
-    *   Then, navigate to the cloned repository and install the project dependencies:
-        ```bash
-        uv pip install .
-        ```
+   - First, install `uv` if you haven't already. You can find instructions on the [official uv documentation](https://github.com/astral-sh/uv#installation). A common method is using pip:
+     ```bash
+     pip install uv
+     or
+     brew install uv
+     ```
+   - Then, navigate to the cloned repository and install the project dependencies:
+     ```bash
+     uv sync
+     ```
 3. Create a Google Cloud project [here](https://console.cloud.google.com/projectcreate).
 4. Open [Gmail in API & Services](https://console.cloud.google.com/apis/library/gmail.googleapis.com) and activate the Gmail API.
 5. Open the [OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent) and create a new consent screen. You only need to provide a name and contact data.
@@ -25,13 +27,13 @@ Here is a detailed guide on how to create the credentials: [https://developers.g
 
 ### Sync all emails
 
-1. Run the script: `python main.py sync --data-dir path/to/your/data` where `--<data-dir>` is the path where all data is stored. This creates a SQLite database in `<data-dir>/messages.db` and stores the user credentials under `<data-dir>/credentials.json`.
+1. Run the script: `uv run main.py sync --data-dir path/to/your/data` where `--<data-dir>` is the path where all data is stored. This creates a SQLite database in `<data-dir>/messages.db` and stores the user credentials under `<data-dir>/credentials.json`.
 2. After the script has finished, you can query the database using, for example, the `sqlite3` command line tool: `sqlite3 <data-dir>/messages.db`.
 3. You can run the script again to sync all new messages. Provide `--full-sync` to force a full sync. However, this will only update the read status, the labels, and the last indexed timestamp for existing messages.
 
 ### Sync a single message
 
-`python main.py sync-message --data-dir path/to/your/data --message-id <message-id>`
+`uv run main.py sync-message --data-dir path/to/your/data --message-id <message-id>`
 
 ## Commandline parameters
 
