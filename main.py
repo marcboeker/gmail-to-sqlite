@@ -1,7 +1,7 @@
 import argparse
 import logging
 import os
-import signal  # Added for signal handling
+import signal
 import sys
 
 import auth
