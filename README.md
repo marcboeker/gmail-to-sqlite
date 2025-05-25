@@ -5,7 +5,15 @@ This is a script to download emails from Gmail and store them in a SQLite databa
 ## Installation
 
 1. Clone this repository: `git clone https://github.com/marcboeker/gmail-to-sqlite.git`.
-2. Install the requirements: `pip install -r requirements.txt`
+2. Install the requirements using `uv`:
+    *   First, install `uv` if you haven't already. You can find instructions on the [official uv documentation](https://github.com/astral-sh/uv#installation). A common method is using pip:
+        ```bash
+        pip install uv
+        ```
+    *   Then, navigate to the cloned repository and install the project dependencies:
+        ```bash
+        uv pip install .
+        ```
 3. Create a Google Cloud project [here](https://console.cloud.google.com/projectcreate).
 4. Open [Gmail in API & Services](https://console.cloud.google.com/apis/library/gmail.googleapis.com) and activate the Gmail API.
 5. Open the [OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent) and create a new consent screen. You only need to provide a name and contact data.
