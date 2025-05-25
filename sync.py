@@ -198,7 +198,9 @@ def all_messages(
             )
             return 0
 
-        logging.info(f"Found {len(all_message_ids)} messages to sync. (Collected {collected_count} message IDs total)")
+        logging.info(
+            f"Found {len(all_message_ids)} messages to sync. (Collected {collected_count} message IDs total)"
+        )
 
         total_synced_count = 0
         processed_count = 0
@@ -276,7 +278,6 @@ def all_messages(
             )
         return total_synced_count
     finally:
-        # Signal handler restoration is now handled in main.py
         pass
 
 
@@ -327,5 +328,4 @@ def single_message(credentials, message_id: str, check_shutdown=None) -> None:
         except Exception as e:
             logging.error(f"Failed to fetch message {message_id}: {str(e)}")
     finally:
-        # Signal handler restoration is now handled in main.py
         pass
