@@ -1,5 +1,6 @@
 import base64
 from email.utils import parseaddr, parsedate_to_datetime
+from datetime import datetime
 
 from bs4 import BeautifulSoup
 
@@ -120,7 +121,13 @@ class Message:
             elif name == "subject":
                 self.subject = value
             elif name == "date":
-                self.timestamp = parsedate_to_datetime(value)
+                # Use the internal date if available, otherwise use the parsed date.
+                # internalDate is the timestamp when the message was received by Gmail.
+                if "internalDate" in msg:
+                    internal_date_secs = int(msg["internalDate"]) / 1000
+                    self.timestamp = datetime.fromtimestamp(internal_date_secs)
+                else:
+                    self.timestamp = parsedate_to_datetime(value) if value else None
 
         # Labels
         if "labelIds" in msg:
