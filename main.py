@@ -1,4 +1,5 @@
 import argparse
+import logging # Added
 import os
 import sys
 
@@ -23,6 +24,16 @@ def prepare_data_dir(data_dir: str) -> None:
 
 
 if __name__ == "__main__":
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s',
+        handlers=[
+            logging.StreamHandler(), # Log to console
+            # Optional: logging.FileHandler("sync.log") # Log to a file
+        ]
+    )
+
     parser = argparse.ArgumentParser()
     parser.add_argument("command", help="The command to run: {sync, sync-message}")
     parser.add_argument(
@@ -38,6 +49,15 @@ if __name__ == "__main__":
         help="The ID of the message to sync",
     )
 
+    default_workers = os.cpu_count() if os.cpu_count() else 4
+    default_workers = max(1, default_workers)  # Ensure at least 1 worker
+    parser.add_argument(
+        "--workers",
+        help="Number of worker threads for parallel fetching",
+        type=int,
+        default=default_workers,
+    )
+
     args = parser.parse_args()
 
     prepare_data_dir(args.data_dir)
@@ -45,10 +65,10 @@ if __name__ == "__main__":
 
     db_conn = db.init(args.data_dir)
     if args.command == "sync":
-        sync.all_messages(credentials, full_sync=args.full_sync)
+        sync.all_messages(credentials, db_conn, full_sync=args.full_sync, num_workers=args.workers)
     elif args.command == "sync-message":
         if args.message_id is None:
-            print("Please provide a message ID")
+            logging.error("Please provide a message ID for sync-message command.") # Changed to logging.error
             sys.exit(1)
         sync.single_message(credentials, args.message_id)
 
