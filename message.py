@@ -106,6 +106,12 @@ class Message:
         self.thread_id = msg["threadId"]
         self.size = msg["sizeEstimate"]
 
+        # Use the internal date if available, otherwise use the parsed date.
+        # internalDate is the timestamp when the message was received by Gmail.
+        if "internalDate" in msg:
+            internal_date_secs = int(msg["internalDate"]) / 1000
+            self.timestamp = datetime.fromtimestamp(internal_date_secs)
+
         for header in msg["payload"]["headers"]:
             name = header["name"].lower()
             value = header["value"]
@@ -120,14 +126,8 @@ class Message:
                 self.recipients["bcc"] = self.parse_addresses(value)
             elif name == "subject":
                 self.subject = value
-            elif name == "date":
-                # Use the internal date if available, otherwise use the parsed date.
-                # internalDate is the timestamp when the message was received by Gmail.
-                if "internalDate" in msg:
-                    internal_date_secs = int(msg["internalDate"]) / 1000
-                    self.timestamp = datetime.fromtimestamp(internal_date_secs)
-                else:
-                    self.timestamp = parsedate_to_datetime(value) if value else None
+            elif name == "date" and self.timestamp is None:
+                self.timestamp = parsedate_to_datetime(value) if value else None
 
         # Labels
         if "labelIds" in msg:

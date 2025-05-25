@@ -123,7 +123,7 @@ def last_indexed() -> datetime:
 
     msg = Message.select().order_by(Message.timestamp.desc()).first()
     if msg:
-        return datetime.fromisoformat(msg.timestamp)
+        return msg.timestamp
     else:
         return None
 
@@ -138,6 +138,6 @@ def first_indexed() -> datetime:
 
     msg = Message.select().order_by(Message.timestamp.asc()).first()
     if msg:
-        return datetime.fromisoformat(msg.timestamp)
+        return msg.timestamp
     else:
         return None
