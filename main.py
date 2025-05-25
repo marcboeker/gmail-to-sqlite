@@ -1,5 +1,5 @@
 import argparse
-import logging # Added
+import logging  # Added
 import os
 import sys
 
@@ -27,11 +27,8 @@ if __name__ == "__main__":
     # Configure logging
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s',
-        handlers=[
-            logging.StreamHandler(), # Log to console
-            # Optional: logging.FileHandler("sync.log") # Log to a file
-        ]
+        format="%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s",
+        handlers=[logging.StreamHandler()],
     )
 
     parser = argparse.ArgumentParser()
@@ -65,10 +62,12 @@ if __name__ == "__main__":
 
     db_conn = db.init(args.data_dir)
     if args.command == "sync":
-        sync.all_messages(credentials, db_conn, full_sync=args.full_sync, num_workers=args.workers)
+        sync.all_messages(
+            credentials, db_conn, full_sync=args.full_sync, num_workers=args.workers
+        )
     elif args.command == "sync-message":
         if args.message_id is None:
-            logging.error("Please provide a message ID for sync-message command.") # Changed to logging.error
+            logging.error("Please provide a message ID for sync-message command.")
             sys.exit(1)
         sync.single_message(credentials, args.message_id)
 

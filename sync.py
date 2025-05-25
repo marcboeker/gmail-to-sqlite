@@ -1,5 +1,6 @@
 import concurrent.futures
 import logging
+import socket
 import time
 from email.utils import parseaddr, parsedate_to_datetime
 
@@ -13,9 +14,22 @@ import message
 MAX_RESULTS = 500
 
 
-def _fetch_message_details(service, message_id: str, labels: dict):
+def _fetch_message(service, message_id: str, labels: dict):
     """
-    Fetches and processes a single message's details with retries.
+    Fetches a single message from Gmail API with retry logic.
+
+    Args:
+        service: The Gmail API service object.
+        message_id: The ID of the message to fetch.
+        labels: Dictionary of labels mapping ID to name.
+
+    Returns:
+        Message object if successful.
+
+    Raises:
+        HttpError: If the message cannot be fetched from the Gmail API.
+        TimeoutError: If the request times out.
+        Exception: For any other unexpected errors.
     """
     max_retries = 3
     retry_delay_seconds = 5
@@ -26,16 +40,7 @@ def _fetch_message_details(service, message_id: str, labels: dict):
                 service.users().messages().get(userId="me", id=message_id).execute()
             )
             msg = message.Message.from_raw(raw_msg, labels)
-            db.create_message(msg)
-            logging.info(
-                f"Successfully synced message {msg.id} (Original ID: {message_id}) from {msg.timestamp}"
-            )
-            return True
-        except IntegrityError as e:
-            logging.error(
-                f"Could not process message {message_id} due to integrity error (will not retry): {str(e)}"
-            )
-            return False
+            return msg
         except HttpError as e:
             if e.resp.status >= 500 and attempt < max_retries - 1:
                 logging.warning(
@@ -46,8 +51,8 @@ def _fetch_message_details(service, message_id: str, labels: dict):
                 logging.error(
                     f"Failed to fetch message {message_id} after {attempt + 1} attempts due to HttpError {e.resp.status}: {str(e)}"
                 )
-                return False
-        except TimeoutError as e:
+                raise
+        except (TimeoutError, socket.timeout) as e:
             if attempt < max_retries - 1:
                 logging.warning(
                     f"Attempt {attempt + 1}/{max_retries} failed for message {message_id} due to timeout. Retrying in {retry_delay_seconds}s..."
@@ -57,7 +62,7 @@ def _fetch_message_details(service, message_id: str, labels: dict):
                 logging.error(
                     f"Failed to fetch message {message_id} after {attempt + 1} attempts due to timeout: {str(e)}"
                 )
-                return False
+                raise
         except Exception as e:
             logging.error(
                 f"An unexpected error occurred while processing message {message_id} on attempt {attempt + 1}: {str(e)}"
@@ -65,8 +70,12 @@ def _fetch_message_details(service, message_id: str, labels: dict):
             if attempt < max_retries - 1:
                 time.sleep(retry_delay_seconds)
             else:
-                return False
-    return False
+                raise
+
+    logging.error(f"Failed to fetch message {message_id} after all retries.")
+    raise RuntimeError(
+        f"Failed to fetch message {message_id} after {max_retries} attempts"
+    )
 
 
 def get_labels(service) -> dict:
@@ -163,8 +172,24 @@ def all_messages(credentials, db_conn, full_sync=False, num_workers: int = 4) ->
 
     # Define a worker function that creates its own service for thread safety
     def thread_worker(message_id):
-        thread_service = _create_service(credentials)
-        return _fetch_message_details(thread_service, message_id, labels)
+        service = _create_service(credentials)
+
+        try:
+            msg = _fetch_message(service, message_id, labels)
+            try:
+                db.create_message(msg)
+                logging.info(
+                    f"Successfully synced message {msg.id} (Original ID: {message_id}) from {msg.timestamp}"
+                )
+                return True
+            except IntegrityError as e:
+                logging.error(
+                    f"Could not process message {message_id} due to integrity error: {str(e)}"
+                )
+                return False
+        except Exception as e:
+            logging.error(f"Failed to fetch message {message_id}: {str(e)}")
+            return False
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
         future_to_id = {
@@ -175,16 +200,13 @@ def all_messages(credentials, db_conn, full_sync=False, num_workers: int = 4) ->
             message_id = future_to_id[future]
             processed_count += 1
             try:
-                if future.result():  # If _fetch_message_details returns True
+                if future.result():
                     total_synced_count += 1
-                # Progress can be reported here based on processed_count
                 if processed_count % 50 == 0 or processed_count == len(all_message_ids):
                     logging.info(
                         f"Processed {processed_count}/{len(all_message_ids)} messages..."
                     )
             except Exception as exc:
-                # This catches exceptions from future.result() itself (e.g., if the task raised an unhandled one)
-                # _fetch_message_details is expected to catch its own errors and return False
                 logging.error(
                     f"Message ID {message_id} generated an exception during future processing: {exc}"
                 )
@@ -206,59 +228,19 @@ def single_message(credentials, message_id: str) -> None:
     Returns:
         None
     """
-
     service = _create_service(credentials)
     labels = get_labels(service)
-    # For single_message, we can reuse _fetch_message_details for consistency in fetching logic and error handling
-    # However, the original instruction implies modifying single_message directly.
-    # I will follow the direct modification approach for single_message as per the prompt for now.
-    # A cleaner approach might be to have single_message call _fetch_message_details.
-    max_retries = 3
-    retry_delay_seconds = 5
-    for attempt in range(max_retries):
+
+    try:
+        msg = _fetch_message(service, message_id, labels)
         try:
-            raw_msg = (
-                service.users().messages().get(userId="me", id=message_id).execute()
-            )
-            msg = message.Message.from_raw(raw_msg, labels)
             db.create_message(msg)
             logging.info(
                 f"Successfully synced message {msg.id} (Original ID: {message_id}) from {msg.timestamp}"
             )
-            return  # Success
         except IntegrityError as e:
             logging.error(
-                f"Could not process message {message_id} due to integrity error (will not retry): {str(e)}"
+                f"Could not process message {message_id} due to integrity error: {str(e)}"
             )
-            return  # Non-retryable
-        except HttpError as e:
-            if e.resp.status >= 500 and attempt < max_retries - 1:
-                logging.warning(
-                    f"Attempt {attempt + 1}/{max_retries} failed for message {message_id} due to server error {e.resp.status}. Retrying in {retry_delay_seconds}s..."
-                )
-                time.sleep(retry_delay_seconds)
-            else:
-                logging.error(
-                    f"Failed to fetch message {message_id} after {attempt + 1} attempts due to HttpError {e.resp.status}: {str(e)}"
-                )
-                return  # Final failure
-        except TimeoutError as e:
-            if attempt < max_retries - 1:
-                logging.warning(
-                    f"Attempt {attempt + 1}/{max_retries} failed for message {message_id} due to timeout. Retrying in {retry_delay_seconds}s..."
-                )
-                time.sleep(retry_delay_seconds)
-            else:
-                logging.error(
-                    f"Failed to fetch message {message_id} after {attempt + 1} attempts due to timeout: {str(e)}"
-                )
-                return  # Final failure
-        except Exception as e:
-            logging.error(
-                f"An unexpected error occurred while processing message {message_id} on attempt {attempt + 1}: {str(e)}"
-            )
-            if attempt < max_retries - 1:
-                time.sleep(retry_delay_seconds)
-            else:
-                return  # Final failure for other exceptions
-    logging.error(f"Failed to sync message {message_id} after all retries.")
+    except Exception as e:
+        logging.error(f"Failed to fetch message {message_id}: {str(e)}")
