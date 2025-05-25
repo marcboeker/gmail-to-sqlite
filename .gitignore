@@ -3,4 +3,3 @@ credentials.json
 .venv
 __pycache__
 .vscode
-demo.py
