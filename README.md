@@ -47,7 +47,19 @@ sync-message            Sync a single message from Gmail to the database.
 --data-dir DATA_DIR     Path to the directory where all data is stored.
 --full-sync             Force a full sync.
 --message-id MESSAGE_ID Sync only the message with the given message id.
+--workers WORKERS       Number of worker threads for parallel fetching (default: number of CPU cores).
 ```
+
+### Graceful Shutdown
+
+The script supports graceful shutdown when you press CTRL+C. When interrupted, it will:
+
+1. Stop accepting new tasks
+2. Wait for currently running tasks to complete
+3. Save progress of completed work
+4. Exit cleanly
+
+Pressing CTRL+C a second time will force an immediate exit.
 
 ## Schema
 
