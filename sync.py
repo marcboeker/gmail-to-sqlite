@@ -123,6 +123,121 @@ def _create_service(credentials):
     return build("gmail", "v1", credentials=credentials)
 
 
+def get_message_ids_from_gmail(service, query=None, check_shutdown=None) -> list:
+    """
+    Fetches all message IDs from Gmail using the provided service.
+
+    Args:
+        service (object): The Gmail API service object.
+        query (list): Optional query parameters to filter messages.
+        check_shutdown (callable): A callback function that returns True if shutdown is requested.
+
+    Returns:
+        list: A list of message IDs from Gmail.
+    """
+    all_message_ids = []
+    page_token = None
+    run = True
+    collected_count = 0
+
+    logging.info("Collecting all message IDs from Gmail...")
+
+    while run and not (check_shutdown and check_shutdown()):
+        try:
+            list_params = {
+                "userId": "me",
+                "maxResults": MAX_RESULTS,
+                "pageToken": page_token,
+            }
+
+            if query:
+                list_params["q"] = " | ".join(query)
+
+            results = service.users().messages().list(**list_params).execute()
+            messages_page = results.get("messages", [])
+
+            for m_info in messages_page:
+                all_message_ids.append(m_info["id"])
+                collected_count += 1
+                if collected_count % 100 == 0:
+                    logging.info(
+                        f"Collected {collected_count} message IDs from Gmail so far..."
+                    )
+
+            if "nextPageToken" in results:
+                page_token = results["nextPageToken"]
+            else:
+                run = False
+        except KeyboardInterrupt:
+            break
+
+    if check_shutdown and check_shutdown():
+        logging.info(
+            "Shutdown requested during message ID collection. Exiting gracefully."
+        )
+        return []
+
+    logging.info(f"Collected {len(all_message_ids)} message IDs from Gmail")
+    return all_message_ids
+
+
+def _detect_and_mark_deleted_messages(gmail_message_ids, check_shutdown=None):
+    """
+    Helper function to detect and mark deleted messages based on comparison
+    between Gmail message IDs and database message IDs.
+
+    Args:
+        gmail_message_ids (list): List of message IDs from Gmail.
+        check_shutdown (callable): A callback function that returns True if shutdown is requested.
+
+    Returns:
+        int: Number of messages newly marked as deleted, or None if no action taken.
+    """
+    try:
+        db_message_ids = set(db.get_all_message_ids())
+        logging.info(
+            f"Retrieved {len(db_message_ids)} message IDs from database for deletion detection"
+        )
+
+        if not db_message_ids:
+            logging.info("No messages in database to check for deletion")
+            return None
+
+        if check_shutdown and check_shutdown():
+            logging.info(
+                "Shutdown requested during deletion detection. Exiting gracefully."
+            )
+            return None
+
+        already_deleted_ids = set(db.get_deleted_message_ids())
+        if already_deleted_ids:
+            logging.info(
+                f"Found {len(already_deleted_ids)} already deleted messages to skip"
+            )
+
+        gmail_ids_set = set(gmail_message_ids)
+        potential_deleted_ids = db_message_ids - gmail_ids_set
+        new_deleted_ids = (
+            list(potential_deleted_ids - already_deleted_ids)
+            if already_deleted_ids
+            else list(potential_deleted_ids)
+        )
+
+        if new_deleted_ids:
+            logging.info(f"Found {len(new_deleted_ids)} new deleted messages to mark")
+            db.mark_messages_as_deleted(new_deleted_ids)
+            logging.info(
+                f"Deletion sync complete. {len(new_deleted_ids)} messages newly marked as deleted."
+            )
+            return len(new_deleted_ids)
+        else:
+            logging.info("No new deleted messages found")
+            return None
+    except Exception as e:
+        logging.error(f"Error during deletion detection: {str(e)}")
+        return None
+
+
 def all_messages(
     credentials,
     full_sync=False,
@@ -131,6 +246,7 @@ def all_messages(
 ) -> int:
     """
     Fetches messages from the Gmail API using the provided credentials, in parallel.
+    Also detects and marks deleted messages.
 
     Args:
         credentials (object): The credentials object used to authenticate the API request.
@@ -158,39 +274,7 @@ def all_messages(
         service = _create_service(credentials)
         labels = get_labels(service)
 
-        all_message_ids = []
-        page_token = None
-        run = True
-        collected_count = 0
-        logging.info("Collecting all message IDs...")
-        while run and not (check_shutdown and check_shutdown()):
-            try:
-                results = (
-                    service.users()
-                    .messages()
-                    .list(
-                        userId="me",
-                        maxResults=MAX_RESULTS,
-                        pageToken=page_token,
-                        q=(
-                            " | ".join(query) if query else None
-                        ),  # Ensure q is not empty string if query is empty
-                    )
-                    .execute()
-                )
-                messages_page = results.get("messages", [])
-                for m_info in messages_page:
-                    all_message_ids.append(m_info["id"])
-                    collected_count += 1
-                    if collected_count % 100 == 0:
-                        print(f"Collected {collected_count} message IDs so far...")
-
-                if "nextPageToken" in results:
-                    page_token = results["nextPageToken"]
-                else:
-                    run = False
-            except KeyboardInterrupt:
-                break
+        all_message_ids = get_message_ids_from_gmail(service, query, check_shutdown)
 
         if check_shutdown and check_shutdown():
             logging.info(
@@ -198,9 +282,10 @@ def all_messages(
             )
             return 0
 
-        logging.info(
-            f"Found {len(all_message_ids)} messages to sync. (Collected {collected_count} message IDs total)"
-        )
+        if full_sync:
+            _detect_and_mark_deleted_messages(all_message_ids, check_shutdown)
+
+        logging.info(f"Found {len(all_message_ids)} messages to sync.")
 
         total_synced_count = 0
         processed_count = 0
@@ -279,6 +364,37 @@ def all_messages(
         return total_synced_count
     finally:
         pass
+
+
+def sync_deleted_messages(credentials, check_shutdown=None) -> None:
+    """
+    Compares message IDs in Gmail with those in the database and marks missing messages as deleted.
+    This function only updates the is_deleted flag and doesn't download full message content.
+    It skips messages that are already marked as deleted for efficiency.
+
+    Args:
+        credentials: The credentials used to authenticate the Gmail API.
+        check_shutdown (callable): A callback function that returns True if shutdown is requested.
+
+    Returns:
+        int: Number of messages marked as deleted.
+    """
+    try:
+        service = _create_service(credentials)
+        gmail_message_ids = get_message_ids_from_gmail(
+            service, check_shutdown=check_shutdown
+        )
+
+        if check_shutdown and check_shutdown():
+            logging.info(
+                "Shutdown requested during message ID collection. Exiting gracefully."
+            )
+            return None
+
+        _detect_and_mark_deleted_messages(gmail_message_ids, check_shutdown)
+    except Exception as e:
+        logging.error(f"Error during deletion sync: {str(e)}")
+        return None
 
 
 def single_message(credentials, message_id: str, check_shutdown=None) -> None:

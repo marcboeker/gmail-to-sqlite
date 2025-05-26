@@ -23,6 +23,7 @@ class Message(Model):
         timestamp (DateTimeField): The timestamp of the message.
         is_read (BooleanField): Indicates whether the message has been read.
         is_outgoing BooleanField(): Indicates whether the message was sent by the user.
+        is_deleted (BooleanField): Indicates whether the message has been deleted from Gmail.
         last_indexed (DateTimeField): The timestamp when the message was last indexed.
 
     Meta:
@@ -41,6 +42,7 @@ class Message(Model):
     timestamp = DateTimeField()
     is_read = BooleanField()
     is_outgoing = BooleanField()
+    is_deleted = BooleanField(default=False)
     last_indexed = DateTimeField()
 
     class Meta:
@@ -71,12 +73,12 @@ def init(data_dir: str, enable_logging=False) -> SqliteDatabase:
     return db
 
 
-def create_message(msg: Message):
+def create_message(msg):
     """
     Saves a message to the database.
 
     Args:
-        msg (Message): The message to save.
+        msg: The message object to save (from message.Message class).
     """
 
     last_indexed = datetime.now()
@@ -92,6 +94,7 @@ def create_message(msg: Message):
         timestamp=msg.timestamp,
         is_read=msg.is_read,
         is_outgoing=msg.is_outgoing,
+        is_deleted=False,
         last_indexed=last_indexed,
     ).on_conflict(
         conflict_target=[Message.message_id],
@@ -109,6 +112,7 @@ def create_message(msg: Message):
             Message.is_read: msg.is_read,
             Message.last_indexed: last_indexed,
             Message.labels: msg.labels,
+            Message.is_deleted: False,
         },
     ).execute()
 
@@ -141,3 +145,43 @@ def first_indexed() -> datetime:
         return msg.timestamp
     else:
         return None
+
+
+def mark_messages_as_deleted(message_ids: list):
+    """
+    Mark messages as deleted in the database.
+
+    Args:
+        message_ids (list): List of message IDs to mark as deleted.
+    """
+    if not message_ids:
+        return
+
+    Message.update(is_deleted=True, last_indexed=datetime.now()).where(
+        Message.message_id.in_(message_ids)
+    ).execute()
+
+
+def get_all_message_ids() -> list:
+    """
+    Returns all message IDs stored in the database.
+
+    Returns:
+        list: List of message IDs.
+    """
+    return [message.message_id for message in Message.select(Message.message_id)]
+
+
+def get_deleted_message_ids() -> list:
+    """
+    Returns all message IDs that are already marked as deleted.
+
+    Returns:
+        list: List of deleted message IDs.
+    """
+    return [
+        message.message_id
+        for message in Message.select(Message.message_id).where(
+            Message.is_deleted == True
+        )
+    ]

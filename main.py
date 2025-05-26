@@ -75,13 +75,16 @@ if __name__ == "__main__":
     )
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", help="The command to run: {sync, sync-message}")
+    parser.add_argument(
+        "command",
+        help="The command to run: {sync, sync-message, sync-deleted-messages}",
+    )
     parser.add_argument(
         "--data-dir", help="The path where the data should be stored", required=True
     )
     parser.add_argument(
         "--full-sync",
-        help="Force a full sync of all messages",
+        help="Force a full sync of all messages and detect deleted messages",
         action="store_true",
     )
     parser.add_argument(
@@ -126,6 +129,8 @@ if __name__ == "__main__":
             sync.single_message(
                 credentials, args.message_id, check_shutdown=check_shutdown
             )
+        elif args.command == "sync-deleted-messages":
+            sync.sync_deleted_messages(credentials, check_shutdown=check_shutdown)
 
         db_conn.close()
     finally:
