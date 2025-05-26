@@ -1,163 +1,227 @@
 import base64
-from email.utils import parseaddr, parsedate_to_datetime
 from datetime import datetime
+from email.utils import parseaddr, parsedate_to_datetime
+from typing import Dict, List, Optional
 
 from bs4 import BeautifulSoup
 
+from constants import SUPPORTED_MIME_TYPES
+
+
+class MessageParsingError(Exception):
+    """Custom exception for message parsing errors."""
+
+    pass
+
 
 class Message:
-    def __init__(self):
-        self.id = None
-        self.thread_id = None
-        self.sender = {}
-        self.recipients = {}
-        self.labels = []
-        self.subject = None
-        self.body = None
-        self.size = 0
-        self.timestamp = None
-        self.is_read = False
-        self.is_outgoing = False
+    """
+    Represents a Gmail message with all its attributes and parsing capabilities.
+
+    Attributes:
+        id (Optional[str]): Message ID
+        thread_id (Optional[str]): Thread ID
+        sender (Dict): Sender information with name and email
+        recipients (Dict): Recipients organized by type (to, cc, bcc)
+        labels (List[str]): List of label names
+        subject (Optional[str]): Message subject
+        body (Optional[str]): Message body text
+        size (int): Message size in bytes
+        timestamp (Optional[datetime]): Message timestamp
+        is_read (bool): Whether message has been read
+        is_outgoing (bool): Whether message was sent by user
+    """
+
+    def __init__(self) -> None:
+        self.id: Optional[str] = None
+        self.thread_id: Optional[str] = None
+        self.sender: Dict[str, str] = {}
+        self.recipients: Dict[str, List[Dict[str, str]]] = {}
+        self.labels: List[str] = []
+        self.subject: Optional[str] = None
+        self.body: Optional[str] = None
+        self.size: int = 0
+        self.timestamp: Optional[datetime] = None
+        self.is_read: bool = False
+        self.is_outgoing: bool = False
 
     @classmethod
-    def from_raw(cls, raw: dict, labels: dict):
+    def from_raw(cls, raw: Dict, labels: Dict[str, str]) -> "Message":
         """
-        Create a Message object from a raw message.
+        Create a Message object from a raw Gmail API response.
 
         Args:
-            raw (dict): The raw message.
-            labels (dict): The label map.
+            raw (Dict): The raw message data from Gmail API.
+            labels (Dict[str, str]): Mapping of label IDs to label names.
 
         Returns:
-            Message: The Message object.
-        """
+            Message: The parsed Message object.
 
-        msg = cls()
-        msg.parse(raw, labels)
-        return msg
-
-    def parse_addresses(self, addresses: str) -> list:
+        Raises:
+            MessageParsingError: If message parsing fails.
         """
-        Parse a list of email addresses.
+        try:
+            msg = cls()
+            msg.parse(raw, labels)
+            return msg
+        except Exception as e:
+            raise MessageParsingError(f"Failed to parse message: {e}")
+
+    def parse_addresses(self, addresses: str) -> List[Dict[str, str]]:
+        """
+        Parse a comma-separated list of email addresses.
 
         Args:
-            addresses (str): The list of email addresses to parse.
+            addresses (str): The comma-separated email addresses.
 
         Returns:
-            list: The parsed email addresses.
+            List[Dict[str, str]]: List of parsed addresses with 'name' and 'email' keys.
         """
+        parsed_addresses: List[Dict[str, str]] = []
+        if not addresses:
+            return parsed_addresses
 
-        parsed_addresses = []
         for address in addresses.split(","):
-            name, email = parseaddr(address)
-            if len(email) > 0:
-                parsed_addresses.append({"email": email.lower(), "name": name})
+            name, email = parseaddr(address.strip())
+            if email:
+                parsed_addresses.append(
+                    {"email": email.lower(), "name": name.strip() if name else ""}
+                )
 
         return parsed_addresses
 
-    def decode_body(self, part) -> str:
+    def decode_body(self, part: Dict) -> str:
         """
-        Decode the body of a message part.
+        Recursively decode the body of a message part.
 
         Args:
-            part (dict): The message part to decode.
+            part (Dict): The message part to decode.
 
         Returns:
-            str: The decoded body of the message part.
+            str: The decoded body text, or empty string if not found.
         """
-
-        if "data" in part["body"]:
-            return base64.urlsafe_b64decode(part["body"]["data"]).decode("utf-8")
-        elif "parts" in part:
-            for subpart in part["parts"]:
-                decoded_body = self.decode_body(subpart)
-                if decoded_body:
-                    return decoded_body
+        try:
+            if "data" in part.get("body", {}):
+                return base64.urlsafe_b64decode(part["body"]["data"]).decode("utf-8")
+            elif "parts" in part:
+                for subpart in part["parts"]:
+                    decoded_body = self.decode_body(subpart)
+                    if decoded_body:
+                        return decoded_body
+        except Exception:
+            # If decoding fails, return empty string
+            pass
 
         return ""
 
     def html2text(self, html: str) -> str:
         """
-        Convert HTML to plain text.
+        Convert HTML content to plain text.
 
         Args:
-            html (str): The HTML to convert.
+            html (str): The HTML content to convert.
 
         Returns:
-            str: The converted HTML.
+            str: The plain text content.
         """
+        if not html:
+            return ""
 
-        soup = BeautifulSoup(html, features="html.parser")
-        return soup.get_text()
+        try:
+            soup = BeautifulSoup(html, features="html.parser")
+            text_content: str = soup.get_text()
+            return text_content
+        except Exception:
+            # If HTML parsing fails, return the original text
+            return html
 
-    def parse(self, msg: dict, labels: dict) -> None:
+    def parse(self, msg: Dict, labels: Dict[str, str]) -> None:
         """
-        Parses a raw message.
+        Parses a raw Gmail message and populates the Message object.
 
         Args:
-            msg (dict): The message to process.
-            labels (dict): The label map.
+            msg (Dict): The raw message data from Gmail API.
+            labels (Dict[str, str]): Mapping of label IDs to label names.
 
-        Returns:
-            None
+        Raises:
+            MessageParsingError: If critical message data cannot be parsed.
         """
+        try:
+            # Basic message info
+            self.id = msg["id"]
+            self.thread_id = msg["threadId"]
+            self.size = msg.get("sizeEstimate", 0)
 
-        self.id = msg["id"]
-        self.thread_id = msg["threadId"]
-        self.size = msg["sizeEstimate"]
+            # Parse timestamp - prefer internal date
+            if "internalDate" in msg:
+                internal_date_secs = int(msg["internalDate"]) / 1000
+                self.timestamp = datetime.fromtimestamp(internal_date_secs)
 
-        # Use the internal date if available, otherwise use the parsed date.
-        # internalDate is the timestamp when the message was received by Gmail.
-        if "internalDate" in msg:
-            internal_date_secs = int(msg["internalDate"]) / 1000
-            self.timestamp = datetime.fromtimestamp(internal_date_secs)
+            # Parse headers
+            headers = msg.get("payload", {}).get("headers", [])
+            for header in headers:
+                name = header["name"].lower()
+                value = header["value"]
 
-        for header in msg["payload"]["headers"]:
-            name = header["name"].lower()
-            value = header["value"]
-            if name == "from":
-                addr = parseaddr(value)
-                self.sender = {"name": addr[0], "email": addr[1]}
-            elif name == "to":
-                self.recipients["to"] = self.parse_addresses(value)
-            elif name == "cc":
-                self.recipients["cc"] = self.parse_addresses(value)
-            elif name == "bcc":
-                self.recipients["bcc"] = self.parse_addresses(value)
-            elif name == "subject":
-                self.subject = value
-            elif name == "date" and self.timestamp is None:
-                self.timestamp = parsedate_to_datetime(value) if value else None
+                if name == "from":
+                    addr = parseaddr(value)
+                    self.sender = {"name": addr[0], "email": addr[1]}
+                elif name == "to":
+                    self.recipients["to"] = self.parse_addresses(value)
+                elif name == "cc":
+                    self.recipients["cc"] = self.parse_addresses(value)
+                elif name == "bcc":
+                    self.recipients["bcc"] = self.parse_addresses(value)
+                elif name == "subject":
+                    self.subject = value
+                elif name == "date" and self.timestamp is None:
+                    try:
+                        self.timestamp = parsedate_to_datetime(value) if value else None
+                    except Exception:
+                        # If date parsing fails, leave timestamp as None
+                        pass
 
-        # Labels
-        if "labelIds" in msg:
-            for l in msg["labelIds"]:
-                self.labels.append(labels[l])
+            # Parse labels
+            if "labelIds" in msg:
+                for label_id in msg["labelIds"]:
+                    if label_id in labels:
+                        self.labels.append(labels[label_id])
 
-            self.is_read = "UNREAD" not in msg["labelIds"]
-            self.is_outgoing = "SENT" in msg["labelIds"]
+                self.is_read = "UNREAD" not in msg["labelIds"]
+                self.is_outgoing = "SENT" in msg["labelIds"]
 
-        # Extract body
-        # For non multipart messages, use the body from the message directly.
-        if "body" in msg["payload"]:
-            if "data" in msg["payload"]["body"]:
-                self.body = base64.urlsafe_b64decode(
-                    msg["payload"]["body"]["data"]
-                ).decode("utf-8")
+            # Extract message body
+            self._extract_body(msg.get("payload", {}))
 
+        except Exception as e:
+            raise MessageParsingError(
+                f"Failed to parse message {msg.get('id', 'unknown')}: {e}"
+            )
+
+    def _extract_body(self, payload: Dict) -> None:
+        """
+        Extract the body text from message payload.
+
+        Args:
+            payload (Dict): The message payload from Gmail API.
+        """
+        # For non-multipart messages
+        if "body" in payload and "data" in payload["body"]:
+            try:
+                self.body = base64.urlsafe_b64decode(payload["body"]["data"]).decode(
+                    "utf-8"
+                )
                 self.body = self.html2text(self.body)
+                return
+            except Exception:
+                pass
 
-        # For multipart messages, get the body from the parts.
-        if "parts" in msg["payload"] and self.body is None:
-            for part in msg["payload"]["parts"]:
-                if (
-                    part["mimeType"] == "text/html"
-                    or part["mimeType"] == "text/plain"
-                    or part["mimeType"] == "multipart/related"
-                    or part["mimeType"] == "multipart/alternative"
-                ):
-                    self.body = self.decode_body(part)
-                    self.body = self.html2text(self.body)
-
-                    if len(self.body) > 0:
+        # For multipart messages
+        if "parts" in payload and self.body is None:
+            for part in payload["parts"]:
+                mime_type = part.get("mimeType", "")
+                if mime_type in SUPPORTED_MIME_TYPES:
+                    body_text = self.decode_body(part)
+                    if body_text:
+                        self.body = self.html2text(body_text)
                         break

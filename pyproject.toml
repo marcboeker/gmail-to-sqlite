@@ -1,45 +1,113 @@
 [project]
 name = "gmail-to-sqlite"
-version = "0.1.0"
-description = "A script to download emails from Gmail and store them in a SQLite database for further analysis."
+version = "0.2.0"
+description = "A robust Python application that syncs Gmail messages to a local SQLite database for analysis and archival purposes."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.8.1"
 license = { file = "LICENSE" }
-# Add other classifiers as appropriate for your project
+authors = [{ name = "Marc Boeker", email = "marc@boeker.dev" }]
+keywords = ["gmail", "sqlite", "email", "sync", "backup", "archive"]
 classifiers = [
-    "Programming Language :: Python :: 3",
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Communications :: Email",
+    "Topic :: Database",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Topic :: System :: Archiving :: Backup",
+    "Topic :: Utilities",
 ]
 
 dependencies = [
-    "beautifulsoup4==4.12.2",
-    "bs4==0.0.1",
-    "cachetools==5.3.2",
-    "certifi==2023.11.17",
-    "charset-normalizer==3.3.2",
-    "google-api-core==2.15.0",
-    "google-api-python-client==2.112.0",
-    "google-auth==2.26.1",
-    "google-auth-httplib2==0.2.0",
-    "google-auth-oauthlib==1.2.0",
-    "googleapis-common-protos==1.62.0",
-    "httplib2==0.22.0",
-    "idna==3.6",
-    "oauthlib==3.2.2",
-    "peewee==3.17.0",
-    "protobuf==4.25.1",
-    "pyasn1==0.5.1",
-    "pyasn1-modules==0.3.0",
-    "pyparsing==3.1.1",
-    "requests==2.31.0",
-    "requests-oauthlib==1.3.1",
-    "rsa==4.9",
-    "soupsieve==2.5",
-    "uritemplate==4.1.1",
-    "urllib3==2.1.0",
+    "beautifulsoup4>=4.12.0",
+    "google-api-python-client>=2.100.0",
+    "google-auth>=2.20.0",
+    "google-auth-oauthlib>=1.0.0",
+    "google-auth-httplib2>=0.2.0",
+    "peewee>=3.15.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
 ]
 
 [project.urls]
 "Homepage" = "https://github.com/marcboeker/gmail-to-sqlite"
 "Bug Tracker" = "https://github.com/marcboeker/gmail-to-sqlite/issues"
+"Documentation" = "https://github.com/marcboeker/gmail-to-sqlite#readme"
+"Source Code" = "https://github.com/marcboeker/gmail-to-sqlite"
+
+[project.scripts]
+gmail-to-sqlite = "main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | __pycache__
+)/
+'''
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = ["--strict-markers", "--disable-warnings", "-v"]
+
+[tool.coverage.run]
+source = ["."]
+omit = ["tests/*", "venv/*", ".venv/*", "*/site-packages/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]

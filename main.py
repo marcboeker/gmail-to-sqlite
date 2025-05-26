@@ -3,42 +3,55 @@ import logging
 import os
 import signal
 import sys
+from typing import Any, Callable, List, Optional
 
 import auth
 import db
 import sync
+from constants import DEFAULT_WORKERS, LOG_FORMAT
+
+
+class ApplicationError(Exception):
+    """Custom exception for application-level errors."""
+
+    pass
 
 
 def prepare_data_dir(data_dir: str) -> None:
     """
-    Get the project name from command line arguments and create a directory for it if it doesn't exist.
+    Create the data directory if it doesn't exist.
+
+    Args:
+        data_dir (str): The path where to store data.
 
     Raises:
-        ValueError: If project name is not provided.
-
-    Returns:
-        None
+        ApplicationError: If directory creation fails.
     """
+    try:
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+    except Exception as e:
+        raise ApplicationError(f"Failed to create data directory {data_dir}: {e}")
 
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir)
 
-
-def setup_signal_handler(shutdown_requested=None, executor=None, futures=None):
+def setup_signal_handler(
+    shutdown_requested: Optional[List[bool]] = None,
+    executor: Any = None,
+    futures: Any = None,
+) -> Any:
     """
     Set up a signal handler for graceful shutdown.
 
     Args:
-        shutdown_requested: A mutable container (list) that holds the shutdown state.
-                           shutdown_requested[0] will be set to True when shutdown is requested.
-        executor: The executor instance to manage cancellation of tasks.
+        shutdown_requested: Mutable container for shutdown state.
+        executor: The executor instance to manage task cancellation.
         futures: Dictionary mapping futures to their IDs.
 
     Returns:
         The original signal handler.
     """
 
-    def handle_sigint(sig, frame):
+    def handle_sigint(sig: Any, frame: Any) -> None:
         if shutdown_requested is not None:
             if not shutdown_requested[0]:
                 logging.info(
@@ -46,7 +59,7 @@ def setup_signal_handler(shutdown_requested=None, executor=None, futures=None):
                 )
                 shutdown_requested[0] = True
 
-                # Cancel non-running futures if executor and futures are provided
+                # Cancel non-running futures if provided
                 if executor and futures:
                     for future in list(futures.keys()):
                         if not future.running():
@@ -55,83 +68,128 @@ def setup_signal_handler(shutdown_requested=None, executor=None, futures=None):
                 logging.warning("Forced shutdown. Exiting immediately.")
                 sys.exit(1)
         else:
-            # Fallback if shutdown_requested is None
             logging.warning(
                 "Forced shutdown. No graceful shutdown available. Exiting immediately."
             )
             sys.exit(1)
 
-    # Store the original handler
     original_sigint_handler = signal.getsignal(signal.SIGINT)
     signal.signal(signal.SIGINT, handle_sigint)
     return original_sigint_handler
 
 
-if __name__ == "__main__":
+def setup_logging() -> None:
+    """Set up application logging configuration."""
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s - %(levelname)s: %(message)s",
+        format=LOG_FORMAT,
         handlers=[logging.StreamHandler()],
     )
 
-    parser = argparse.ArgumentParser()
+
+def create_argument_parser() -> argparse.ArgumentParser:
+    """Create and configure the command line argument parser."""
+    parser = argparse.ArgumentParser(
+        description="Gmail to SQLite synchronization tool",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Commands:
+  sync                     Sync all messages (incremental by default)
+  sync-message             Sync a single message by ID
+  sync-deleted-messages    Detect and mark deleted messages
+
+Examples:
+  %(prog)s sync --data-dir ./data
+  %(prog)s sync --data-dir ./data --full-sync
+  %(prog)s sync-message --data-dir ./data --message-id abc123
+        """,
+    )
+
     parser.add_argument(
         "command",
-        help="The command to run: {sync, sync-message, sync-deleted-messages}",
+        choices=["sync", "sync-message", "sync-deleted-messages"],
+        help="The command to run",
     )
     parser.add_argument(
-        "--data-dir", help="The path where the data should be stored", required=True
+        "--data-dir", required=True, help="The path where the data should be stored"
     )
     parser.add_argument(
         "--full-sync",
-        help="Force a full sync of all messages and detect deleted messages",
         action="store_true",
+        help="Force a full sync of all messages and detect deleted messages",
     )
     parser.add_argument(
         "--message-id",
-        help="The ID of the message to sync",
+        help="The ID of the message to sync (required for sync-message command)",
     )
-
-    default_workers = max(1, os.cpu_count() or 4)
     parser.add_argument(
         "--workers",
-        help="Number of worker threads for parallel fetching",
         type=int,
-        default=default_workers,
+        default=DEFAULT_WORKERS,
+        help=f"Number of worker threads for parallel fetching (default: {DEFAULT_WORKERS})",
     )
 
-    args = parser.parse_args()
+    return parser
 
-    prepare_data_dir(args.data_dir)
-    credentials = auth.get_credentials(args.data_dir)
 
-    # Set up shared shutdown flag for signal handling - using a list to make it mutable
-    shutdown_state = [False]
-
-    def check_shutdown():
-        return shutdown_state[0]
-
-    original_sigint_handler = setup_signal_handler(shutdown_requested=shutdown_state)
+def main() -> None:
+    """Main application entry point."""
+    setup_logging()
 
     try:
-        db_conn = db.init(args.data_dir)
-        if args.command == "sync":
-            sync.all_messages(
-                credentials,
-                full_sync=args.full_sync,
-                num_workers=args.workers,
-                check_shutdown=check_shutdown,
-            )
-        elif args.command == "sync-message":
-            if args.message_id is None:
-                logging.error("Please provide a message ID for sync-message command.")
-                sys.exit(1)
-            sync.single_message(
-                credentials, args.message_id, check_shutdown=check_shutdown
-            )
-        elif args.command == "sync-deleted-messages":
-            sync.sync_deleted_messages(credentials, check_shutdown=check_shutdown)
+        parser = create_argument_parser()
+        args = parser.parse_args()
 
-        db_conn.close()
-    finally:
-        signal.signal(signal.SIGINT, original_sigint_handler)
+        # Validate command-specific arguments
+        if args.command == "sync-message" and not args.message_id:
+            parser.error("--message-id is required for sync-message command")
+
+        prepare_data_dir(args.data_dir)
+        credentials = auth.get_credentials(args.data_dir)
+
+        # Set up shutdown handling
+        shutdown_state = [False]
+
+        def check_shutdown() -> bool:
+            return shutdown_state[0]
+
+        original_sigint_handler = setup_signal_handler(
+            shutdown_requested=shutdown_state
+        )
+
+        try:
+            db_conn = db.init(args.data_dir)
+
+            if args.command == "sync":
+                sync.all_messages(
+                    credentials,
+                    full_sync=args.full_sync,
+                    num_workers=args.workers,
+                    check_shutdown=check_shutdown,
+                )
+            elif args.command == "sync-message":
+                sync.single_message(
+                    credentials, args.message_id, check_shutdown=check_shutdown
+                )
+            elif args.command == "sync-deleted-messages":
+                sync.sync_deleted_messages(credentials, check_shutdown=check_shutdown)
+
+            db_conn.close()
+            logging.info("Operation completed successfully")
+
+        except (auth.AuthenticationError, db.DatabaseError, sync.SyncError) as e:
+            logging.error(f"Operation failed: {e}")
+            sys.exit(1)
+        except Exception as e:
+            logging.error(f"Unexpected error: {e}")
+            sys.exit(1)
+        finally:
+            signal.signal(signal.SIGINT, original_sigint_handler)
+
+    except KeyboardInterrupt:
+        logging.info("Operation cancelled by user")
+        sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

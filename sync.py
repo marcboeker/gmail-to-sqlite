@@ -1,9 +1,8 @@
 import concurrent.futures
 import logging
-import signal
 import socket
 import time
-from email.utils import parseaddr, parsedate_to_datetime
+from typing import Any, Callable, Dict, List, Optional, Set
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -11,33 +10,46 @@ from peewee import IntegrityError
 
 import db
 import message
+from constants import (
+    DEFAULT_WORKERS,
+    GMAIL_API_VERSION,
+    MAX_RESULTS_PER_PAGE,
+    MAX_RETRY_ATTEMPTS,
+    RETRY_DELAY_SECONDS,
+    PROGRESS_LOG_INTERVAL,
+    COLLECTION_LOG_INTERVAL,
+)
 
-MAX_RESULTS = 500
+
+class SyncError(Exception):
+    """Custom exception for synchronization errors."""
+
+    pass
 
 
-def _fetch_message(service, message_id: str, labels: dict, check_interrupt=None):
+def _fetch_message(
+    service: Any,
+    message_id: str,
+    labels: Dict[str, str],
+    check_interrupt: Optional[Callable[[], bool]] = None,
+) -> message.Message:
     """
-    Fetches a single message from Gmail API with retry logic.
+    Fetches a single message from Gmail API with retry logic and robust error handling.
 
     Args:
         service: The Gmail API service object.
         message_id: The ID of the message to fetch.
-        labels: Dictionary of labels mapping ID to name.
-        check_interrupt: Optional callback function that returns True if process should be interrupted.
+        labels: Dictionary mapping label IDs to label names.
+        check_interrupt: Optional callback that returns True if process should be interrupted.
 
     Returns:
-        Message object if successful.
+        Message: The parsed message object.
 
     Raises:
-        HttpError: If the message cannot be fetched from the Gmail API.
-        TimeoutError: If the request times out.
-        Exception: For any other unexpected errors.
-        InterruptedError: If the process was interrupted by check_interrupt.
+        InterruptedError: If the process was interrupted.
+        SyncError: If the message cannot be fetched after all retries.
     """
-    max_retries = 3
-    retry_delay_seconds = 5
-
-    for attempt in range(max_retries):
+    for attempt in range(MAX_RETRY_ATTEMPTS):
         if check_interrupt and check_interrupt():
             raise InterruptedError("Process was interrupted")
 
@@ -45,110 +57,135 @@ def _fetch_message(service, message_id: str, labels: dict, check_interrupt=None)
             raw_msg = (
                 service.users().messages().get(userId="me", id=message_id).execute()
             )
-            msg = message.Message.from_raw(raw_msg, labels)
-            return msg
+            return message.Message.from_raw(raw_msg, labels)
+
         except HttpError as e:
-            if e.resp.status >= 500 and attempt < max_retries - 1:
+            if e.resp.status >= 500 and attempt < MAX_RETRY_ATTEMPTS - 1:
                 logging.warning(
-                    f"Attempt {attempt + 1}/{max_retries} failed for message {message_id} due to server error {e.resp.status}. Retrying in {retry_delay_seconds}s..."
+                    f"Attempt {attempt + 1}/{MAX_RETRY_ATTEMPTS} failed for message {message_id} "
+                    f"due to server error {e.resp.status}. Retrying in {RETRY_DELAY_SECONDS}s..."
                 )
                 if check_interrupt and check_interrupt():
                     raise InterruptedError("Process was interrupted")
-                time.sleep(retry_delay_seconds)
+                time.sleep(RETRY_DELAY_SECONDS)
             else:
-                logging.error(
-                    f"Failed to fetch message {message_id} after {attempt + 1} attempts due to HttpError {e.resp.status}: {str(e)}"
+                error_msg = (
+                    f"Failed to fetch message {message_id} after {attempt + 1} attempts "
+                    f"due to HttpError {e.resp.status}: {str(e)}"
                 )
-                raise
+                logging.error(error_msg)
+                raise SyncError(error_msg)
+
         except (TimeoutError, socket.timeout) as e:
-            if attempt < max_retries - 1:
+            if attempt < MAX_RETRY_ATTEMPTS - 1:
                 logging.warning(
-                    f"Attempt {attempt + 1}/{max_retries} failed for message {message_id} due to timeout. Retrying in {retry_delay_seconds}s..."
+                    f"Attempt {attempt + 1}/{MAX_RETRY_ATTEMPTS} failed for message {message_id} "
+                    f"due to timeout. Retrying in {RETRY_DELAY_SECONDS}s..."
                 )
                 if check_interrupt and check_interrupt():
                     raise InterruptedError("Process was interrupted")
-                time.sleep(retry_delay_seconds)
+                time.sleep(RETRY_DELAY_SECONDS)
             else:
-                logging.error(
-                    f"Failed to fetch message {message_id} after {attempt + 1} attempts due to timeout: {str(e)}"
+                error_msg = (
+                    f"Failed to fetch message {message_id} after {attempt + 1} attempts "
+                    f"due to timeout: {str(e)}"
                 )
-                raise
+                logging.error(error_msg)
+                raise SyncError(error_msg)
+
         except Exception as e:
             logging.error(
-                f"An unexpected error occurred while processing message {message_id} on attempt {attempt + 1}: {str(e)}"
+                f"Unexpected error processing message {message_id} on attempt {attempt + 1}: {str(e)}"
             )
-            if attempt < max_retries - 1:
+            if attempt < MAX_RETRY_ATTEMPTS - 1:
                 if check_interrupt and check_interrupt():
                     raise InterruptedError("Process was interrupted")
-                time.sleep(retry_delay_seconds)
+                time.sleep(RETRY_DELAY_SECONDS)
             else:
-                raise
+                error_msg = f"Failed to fetch message {message_id} after {MAX_RETRY_ATTEMPTS} attempts"
+                logging.error(error_msg)
+                raise SyncError(error_msg)
 
-    logging.error(f"Failed to fetch message {message_id} after all retries.")
-    raise RuntimeError(
-        f"Failed to fetch message {message_id} after {max_retries} attempts"
-    )
+    # This should never be reached due to the exception handling above
+    raise SyncError(f"Unexpected error: failed to fetch message {message_id}")
 
 
-def get_labels(service) -> dict:
+def get_labels(service: Any) -> Dict[str, str]:
     """
-    Retrieves all labels from the Gmail API for the authenticated user.
+    Retrieves all labels from the Gmail API.
 
     Args:
-        service (object): The Gmail API service object.
+        service: The Gmail API service object.
 
     Returns:
-        dict: A dictionary containing the labels, where the key is the label ID and the value is the label name.
+        Dict[str, str]: Mapping of label IDs to label names.
+
+    Raises:
+        SyncError: If labels cannot be retrieved.
     """
+    try:
+        labels = {}
+        response = service.users().labels().list(userId="me").execute()
+        for label in response.get("labels", []):
+            labels[label["id"]] = label["name"]
+        return labels
+    except Exception as e:
+        raise SyncError(f"Failed to retrieve labels: {e}")
 
-    # Get all labels
-    labels = {}
-    for label in service.users().labels().list(userId="me").execute()["labels"]:
-        labels[label["id"]] = label["name"]
 
-    return labels
-
-
-def _create_service(credentials):
+def _create_service(credentials: Any) -> Any:
     """
-    Creates a new Gmail API service object with the provided credentials.
-    Use this to create a fresh service object for each thread.
+    Creates a new Gmail API service object.
 
     Args:
-        credentials: The credentials object used to authenticate the API request.
+        credentials: The credentials object for API authentication.
 
     Returns:
-        object: A new Gmail API service object.
+        The Gmail API service object.
+
+    Raises:
+        SyncError: If service creation fails.
     """
-    return build("gmail", "v1", credentials=credentials)
+    try:
+        return build("gmail", GMAIL_API_VERSION, credentials=credentials)
+    except Exception as e:
+        raise SyncError(f"Failed to create Gmail service: {e}")
 
 
-def get_message_ids_from_gmail(service, query=None, check_shutdown=None) -> list:
+def get_message_ids_from_gmail(
+    service: Any,
+    query: Optional[List[str]] = None,
+    check_shutdown: Optional[Callable[[], bool]] = None,
+) -> List[str]:
     """
-    Fetches all message IDs from Gmail using the provided service.
+    Fetches all message IDs from Gmail matching the query.
 
     Args:
-        service (object): The Gmail API service object.
-        query (list): Optional query parameters to filter messages.
-        check_shutdown (callable): A callback function that returns True if shutdown is requested.
+        service: The Gmail API service object.
+        query: Optional list of query strings to filter messages.
+        check_shutdown: Callback that returns True if shutdown is requested.
 
     Returns:
-        list: A list of message IDs from Gmail.
+        List[str]: List of message IDs from Gmail.
+
+    Raises:
+        SyncError: If message ID collection fails.
     """
     all_message_ids = []
     page_token = None
-    run = True
     collected_count = 0
 
     logging.info("Collecting all message IDs from Gmail...")
 
-    while run and not (check_shutdown and check_shutdown()):
-        try:
+    try:
+        while not (check_shutdown and check_shutdown()):
             list_params = {
                 "userId": "me",
-                "maxResults": MAX_RESULTS,
-                "pageToken": page_token,
+                "maxResults": MAX_RESULTS_PER_PAGE,
             }
+
+            if page_token:
+                list_params["pageToken"] = page_token
 
             if query:
                 list_params["q"] = " | ".join(query)
@@ -159,17 +196,20 @@ def get_message_ids_from_gmail(service, query=None, check_shutdown=None) -> list
             for m_info in messages_page:
                 all_message_ids.append(m_info["id"])
                 collected_count += 1
-                if collected_count % 100 == 0:
+
+                if collected_count % COLLECTION_LOG_INTERVAL == 0:
                     logging.info(
-                        f"Collected {collected_count} message IDs from Gmail so far..."
+                        f"Collected {collected_count} message IDs from Gmail..."
                     )
 
-            if "nextPageToken" in results:
-                page_token = results["nextPageToken"]
-            else:
-                run = False
-        except KeyboardInterrupt:
-            break
+            page_token = results.get("nextPageToken")
+            if not page_token:
+                break
+
+    except KeyboardInterrupt:
+        logging.info("Message ID collection interrupted by user")
+    except Exception as e:
+        raise SyncError(f"Failed to collect message IDs: {e}")
 
     if check_shutdown and check_shutdown():
         logging.info(
@@ -181,7 +221,9 @@ def get_message_ids_from_gmail(service, query=None, check_shutdown=None) -> list
     return all_message_ids
 
 
-def _detect_and_mark_deleted_messages(gmail_message_ids, check_shutdown=None):
+def _detect_and_mark_deleted_messages(
+    gmail_message_ids: List[str], check_shutdown: Optional[Callable[[], bool]] = None
+) -> Optional[int]:
     """
     Helper function to detect and mark deleted messages based on comparison
     between Gmail message IDs and database message IDs.
@@ -239,10 +281,10 @@ def _detect_and_mark_deleted_messages(gmail_message_ids, check_shutdown=None):
 
 
 def all_messages(
-    credentials,
-    full_sync=False,
+    credentials: Any,
+    full_sync: bool = False,
     num_workers: int = 4,
-    check_shutdown=None,
+    check_shutdown: Optional[Callable[[], bool]] = None,
 ) -> int:
     """
     Fetches messages from the Gmail API using the provided credentials, in parallel.
@@ -290,7 +332,7 @@ def all_messages(
         total_synced_count = 0
         processed_count = 0
 
-        def thread_worker(message_id):
+        def thread_worker(message_id: str) -> bool:
             if check_shutdown and check_shutdown():
                 return False
 
@@ -340,8 +382,9 @@ def all_messages(
                     if not future.cancelled():
                         if future.result():
                             total_synced_count += 1
-                    if processed_count % 50 == 0 or processed_count == len(
-                        all_message_ids
+                    if (
+                        processed_count % PROGRESS_LOG_INTERVAL == 0
+                        or processed_count == len(all_message_ids)
                     ):
                         logging.info(
                             f"Processed {processed_count}/{len(all_message_ids)} messages..."
@@ -351,6 +394,9 @@ def all_messages(
                         f"Task for message {message_id} was cancelled due to shutdown"
                     )
                 except Exception as exc:
+                    logging.error(
+                        f"Message ID {message_id} generated an exception during future processing: {exc}"
+                    )
                     logging.error(
                         f"Message ID {message_id} generated an exception during future processing: {exc}"
                     )
@@ -366,7 +412,9 @@ def all_messages(
         pass
 
 
-def sync_deleted_messages(credentials, check_shutdown=None) -> None:
+def sync_deleted_messages(
+    credentials: Any, check_shutdown: Optional[Callable[[], bool]] = None
+) -> None:
     """
     Compares message IDs in Gmail with those in the database and marks missing messages as deleted.
     This function only updates the is_deleted flag and doesn't download full message content.
@@ -397,7 +445,11 @@ def sync_deleted_messages(credentials, check_shutdown=None) -> None:
         return None
 
 
-def single_message(credentials, message_id: str, check_shutdown=None) -> None:
+def single_message(
+    credentials: Any,
+    message_id: str,
+    check_shutdown: Optional[Callable[[], bool]] = None,
+) -> None:
     """
     Syncs a single message from Gmail using the provided credentials and message ID.
 

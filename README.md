@@ -1,91 +1,106 @@
 # Gmail to SQLite
 
-This is a script to download emails from Gmail and store them in a SQLite database for further analysis. I find it extremely useful to have all my emails in a database to run queries on them. For example, I can find out how many emails I received per sender, which emails take the most space, and which emails from which sender I never read.
+A robust Python application that syncs Gmail messages to a local SQLite database for analysis and archival purposes.
+
+## Features
+
+- **Incremental Sync**: Only downloads new messages by default
+- **Full Sync**: Option to download all messages and detect deletions
+- **Parallel Processing**: Multi-threaded message fetching for improved performance
+- **Robust Error Handling**: Automatic retries with exponential backoff
+- **Graceful Shutdown**: Handles interruption signals cleanly
+- **Type Safety**: Comprehensive type hints throughout the codebase
 
 ## Installation
 
-1. Clone this repository: `git clone https://github.com/marcboeker/gmail-to-sqlite.git`.
-2. Install the requirements using `uv`:
-   - First, install `uv` if you haven't already. You can find instructions on the [official uv documentation](https://github.com/astral-sh/uv#installation). A common method is using pip:
-     ```bash
-     pip install uv
-     or
-     brew install uv
-     ```
-   - Then, navigate to the cloned repository and install the project dependencies:
-     ```bash
-     uv sync
-     ```
-3. Create a Google Cloud project [here](https://console.cloud.google.com/projectcreate).
-4. Open [Gmail in API & Services](https://console.cloud.google.com/apis/library/gmail.googleapis.com) and activate the Gmail API.
-5. Open the [OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent) and create a new consent screen. You only need to provide a name and contact data.
-6. Next open [Create OAuth client ID](https://console.cloud.google.com/apis/credentials/oauthclient) and create credentials for a `Desktop app`. Download the credentials file and save it under `credentials.json` in the root of this repository.
+### Prerequisites
 
-Here is a detailed guide on how to create the credentials: [https://developers.google.com/gmail/api/quickstart/python#set_up_your_environment](https://developers.google.com/gmail/api/quickstart/python#set_up_your_environment).
+- Python 3.8 or higher
+- Google Cloud Project with Gmail API enabled
+- OAuth 2.0 credentials file (`credentials.json`)
+
+### Setup
+
+1. **Clone the repository:**
+
+   ```bash
+   git clone https://github.com/marcboeker/gmail-to-sqlite.git
+   cd gmail-to-sqlite
+   ```
+
+2. **Install dependencies:**
+
+   ```bash
+   # Using uv
+   uv sync
+   ```
+
+3. **Set up Gmail API credentials:**
+   - Go to the [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select an existing one
+   - Enable the Gmail API
+   - Create OAuth 2.0 credentials (Desktop application)
+   - Download the credentials file and save it as `credentials.json` in the project root
 
 ## Usage
 
-### Sync all emails
+### Basic Commands
 
-1. Run the script: `uv run main.py sync --data-dir path/to/your/data` where `--<data-dir>` is the path where all data is stored. This creates a SQLite database in `<data-dir>/messages.db` and stores the user credentials under `<data-dir>/token.json`.
-2. After the script has finished, you can query the database using, for example, the `sqlite3` command line tool: `sqlite3 <data-dir>/messages.db`.
-3. You can run the script again to sync all new messages. Provide `--full-sync` to force a full sync. This will update the read status, the labels, and the last indexed timestamp for existing messages, and also detect any messages that have been deleted from Gmail and mark them with `is_deleted = True` in the database.
+```bash
+# Incremental sync (default)
+python main.py sync --data-dir ./data
 
-### Sync a single message
+# Full sync with deletion detection
+python main.py sync --data-dir ./data --full-sync
 
-`uv run main.py sync-message --data-dir path/to/your/data --message-id <message-id>`
+# Sync a specific message
+python main.py sync-message --data-dir ./data --message-id MESSAGE_ID
 
-## Commandline parameters
+# Detect and mark deleted messages only
+python main.py sync-deleted-messages --data-dir ./data
 
+# Use custom number of worker threads
+python main.py sync --data-dir ./data --workers 8
 ```
-usage: main.py [-h] [--data-dir DATA_DIR] [--update] {sync, sync-message, sync-deleted-messages}
 
-Main commands:
-sync                    Sync emails from Gmail to the database.
-sync-message            Sync a single message from Gmail to the database.
-sync-deleted-messages   Only check for deleted messages and update the is_deleted flag without downloading full message content.
+### Command Line Arguments
 
---data-dir DATA_DIR     Path to the directory where all data is stored.
---full-sync             Force a full sync and detect deleted messages.
---message-id MESSAGE_ID Sync only the message with the given message id.
---workers WORKERS       Number of worker threads for parallel fetching (default: number of CPU cores).
-```
+- `command`: Required. One of `sync`, `sync-message`, or `sync-deleted-messages`
+- `--data-dir`: Required. Directory where the SQLite database will be stored
+- `--full-sync`: Optional. Forces a complete sync of all messages
+- `--message-id`: Required for `sync-message`. The ID of a specific message to sync
+- `--workers`: Optional. Number of worker threads (default: number of CPU cores)
 
 ### Graceful Shutdown
 
-The script supports graceful shutdown when you press CTRL+C. When interrupted, it will:
+The application supports graceful shutdown when you press CTRL+C:
 
-1. Stop accepting new tasks
-2. Wait for currently running tasks to complete
-3. Save progress of completed work
-4. Exit cleanly
+1. Stops accepting new tasks
+2. Waits for currently running tasks to complete
+3. Saves progress of completed work
+4. Exits cleanly
 
 Pressing CTRL+C a second time will force an immediate exit.
 
-## Schema
+## Database Schema
 
-```sql
-CREATE TABLE IF NOT EXISTS "messages" (
-    "id" INTEGER NOT NULL PRIMARY KEY, -- internal id
-    "message_id" TEXT NOT NULL, -- Gmail message id
-    "thread_id" TEXT NOT NULL, -- Gmail thread id
-    "sender" JSON NOT NULL, -- Sender as JSON in the form {"name": "Foo Bar", "email": "foo@example.com"}
-    "recipients" JSON NOT NULL, -- JSON object: {
-      -- "to": [{"email": "foo@example.com", "name": "Foo Bar"}, ...],
-      -- "cc": [{"email": "foo@example.com", "name": "Foo Bar"}, ...],
-      -- "bcc": [{"email": "foo@example.com", "name": "Foo Bar"}, ...]
-    --}
-    "labels" JSON NOT NULL, -- JSON array: ["INBOX", "UNREAD", ...]
-    "subject" TEXT NOT NULL, -- Subject of the email
-    "body" TEXT NOT NULL, -- Extracted body either als HTML or plain text
-    "size" INTEGER NOT NULL, -- Size reported by Gmail
-    "timestamp" DATETIME NOT NULL, -- When the email was sent/received
-    "is_read" INTEGER NOT NULL, -- 0=Unread, 1=Read
-    "is_outgoing" INTEGER NOT NULL, -- 0=Incoming, 1=Outgoing
-    "is_deleted" INTEGER NOT NULL, -- 0=Available in Gmail, 1=Deleted from Gmail
-    "last_indexed" DATETIME NOT NULL -- Timestamp when the email was last seen on the server
-);
-```
+The application creates a SQLite database with the following schema:
+
+| Field        | Type     | Description                      |
+| ------------ | -------- | -------------------------------- |
+| message_id   | TEXT     | Unique Gmail message ID          |
+| thread_id    | TEXT     | Gmail thread ID                  |
+| sender       | JSON     | Sender information (name, email) |
+| recipients   | JSON     | Recipients by type (to, cc, bcc) |
+| labels       | JSON     | Array of Gmail labels            |
+| subject      | TEXT     | Message subject                  |
+| body         | TEXT     | Message body (plain text)        |
+| size         | INTEGER  | Message size in bytes            |
+| timestamp    | DATETIME | Message timestamp                |
+| is_read      | BOOLEAN  | Read status                      |
+| is_outgoing  | BOOLEAN  | Whether sent by user             |
+| is_deleted   | BOOLEAN  | Whether deleted from Gmail       |
+| last_indexed | DATETIME | Last sync timestamp              |
 
 ## Example queries
 

@@ -1,45 +1,75 @@
 import os
+from typing import Any, Optional
 
-import google.oauth2
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
-OAUTH2_CREDENTIALS = "credentials.json"
+from constants import GMAIL_SCOPES, OAUTH2_CREDENTIALS_FILE, TOKEN_FILE_NAME
 
 
-def get_credentials(data_dir: str) -> google.oauth2.credentials.Credentials:
+class AuthenticationError(Exception):
+    """Custom exception for authentication-related errors."""
+
+    pass
+
+
+def get_credentials(data_dir: str) -> Any:
     """
     Retrieves the authentication credentials for the specified data_dir by either loading
-    it from the <data_dir>/credentials.json file or by running the authentication flow.
+    them from the token file or by running the authentication flow.
 
     Args:
         data_dir (str): The path where to store data.
 
     Returns:
-        google.oauth2.credentials.Credentials: The authentication credentials.
+        Any: The authentication credentials (compatible with Google API clients).
+
+    Raises:
+        AuthenticationError: If credentials cannot be obtained or are invalid.
+        FileNotFoundError: If the OAuth2 credentials file is not found.
     """
+    if not os.path.exists(OAUTH2_CREDENTIALS_FILE):
+        raise FileNotFoundError(f"{OAUTH2_CREDENTIALS_FILE} not found")
 
-    if not os.path.exists(OAUTH2_CREDENTIALS):
-        raise ValueError("credentials.json not found")
+    token_file_path = os.path.join(data_dir, TOKEN_FILE_NAME)
+    creds: Optional[Any] = None
 
-    creds = None
-    # The file token.json stores the user's access and refresh tokens, and is
-    # created automatically when the authorization flow completes for the first
-    # time.
-    token_file = f"{data_dir}/token.json"
-    if os.path.exists(token_file):
-        creds = Credentials.from_authorized_user_file(token_file, SCOPES)
-    # If there are no (valid) credentials available, let the user log in.
+    # Load existing credentials if available
+    if os.path.exists(token_file_path):
+        try:
+            creds = Credentials.from_authorized_user_file(token_file_path, GMAIL_SCOPES)
+        except Exception as e:
+            raise AuthenticationError(f"Failed to load existing credentials: {e}")
+
+    # Refresh or obtain new credentials if needed
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+            try:
+                creds.refresh(Request())
+            except Exception as e:
+                raise AuthenticationError(f"Failed to refresh credentials: {e}")
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(OAUTH2_CREDENTIALS, SCOPES)
-            creds = flow.run_local_server(port=0)
-        # Save the credentials for the next run
-        with open(token_file, "w") as token:
-            token.write(creds.to_json())
+            try:
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    OAUTH2_CREDENTIALS_FILE, GMAIL_SCOPES
+                )
+                # The flow returns credentials that may be of different types
+                # but all are compatible with the API usage
+                flow_creds = flow.run_local_server(port=0)
+                creds = flow_creds
+            except Exception as e:
+                raise AuthenticationError(f"Failed to obtain new credentials: {e}")
+
+        # Save credentials for future use
+        if creds:
+            try:
+                with open(token_file_path, "w") as token:
+                    token.write(creds.to_json())
+            except Exception as e:
+                raise AuthenticationError(f"Failed to save credentials: {e}")
+
+    if not creds:
+        raise AuthenticationError("Failed to obtain valid credentials")
 
     return creds

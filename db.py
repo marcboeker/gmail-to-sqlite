@@ -1,10 +1,27 @@
 import logging
 from datetime import datetime
+from typing import Any, List, Optional
 
-from peewee import *
-from playhouse.sqlite_ext import *
+from peewee import (
+    BooleanField,
+    DateTimeField,
+    IntegerField,
+    Model,
+    Proxy,
+    TextField,
+    SQL,
+)
+from playhouse.sqlite_ext import JSONField, SqliteDatabase
+
+from constants import DATABASE_FILE_NAME
 
 database_proxy = Proxy()
+
+
+class DatabaseError(Exception):
+    """Custom exception for database-related errors."""
+
+    pass
 
 
 class Message(Model):
@@ -50,9 +67,9 @@ class Message(Model):
         db_table = "messages"
 
 
-def init(data_dir: str, enable_logging=False) -> SqliteDatabase:
+def init(data_dir: str, enable_logging: bool = False) -> SqliteDatabase:
     """
-    Initialize the database for the given data_dir. The database is stored in <data_dir>/messages.db.
+    Initialize the database for the given data_dir.
 
     Args:
         data_dir (str): The path where to store the data.
@@ -60,128 +77,165 @@ def init(data_dir: str, enable_logging=False) -> SqliteDatabase:
 
     Returns:
         SqliteDatabase: The initialized database object.
+
+    Raises:
+        DatabaseError: If database initialization fails.
     """
-    db = SqliteDatabase(f"{data_dir}/messages.db")
-    database_proxy.initialize(db)
-    db.create_tables([Message])
+    try:
+        db_path = f"{data_dir}/{DATABASE_FILE_NAME}"
+        db = SqliteDatabase(db_path)
+        database_proxy.initialize(db)
+        db.create_tables([Message])
 
-    if enable_logging:
-        logger = logging.getLogger("peewee")
-        logger.setLevel(logging.DEBUG)
-        logger.addHandler(logging.StreamHandler())
+        if enable_logging:
+            logger = logging.getLogger("peewee")
+            logger.setLevel(logging.DEBUG)
+            logger.addHandler(logging.StreamHandler())
 
-    return db
+        return db
+    except Exception as e:
+        raise DatabaseError(f"Failed to initialize database: {e}")
 
 
-def create_message(msg):
+def create_message(msg: Any) -> None:
     """
-    Saves a message to the database.
+    Saves a message to the database with conflict resolution.
 
     Args:
         msg: The message object to save (from message.Message class).
+
+    Raises:
+        DatabaseError: If the message cannot be saved to the database.
     """
+    try:
+        last_indexed = datetime.now()
+        Message.insert(
+            message_id=msg.id,
+            thread_id=msg.thread_id,
+            sender=msg.sender,
+            recipients=msg.recipients,
+            labels=msg.labels,
+            subject=msg.subject,
+            body=msg.body,
+            size=msg.size,
+            timestamp=msg.timestamp,
+            is_read=msg.is_read,
+            is_outgoing=msg.is_outgoing,
+            is_deleted=False,
+            last_indexed=last_indexed,
+        ).on_conflict(
+            conflict_target=[Message.message_id],
+            preserve=[
+                Message.thread_id,
+                Message.sender,
+                Message.recipients,
+                Message.subject,
+                Message.body,
+                Message.size,
+                Message.timestamp,
+                Message.is_outgoing,
+            ],
+            update={
+                Message.is_read: msg.is_read,
+                Message.last_indexed: last_indexed,
+                Message.labels: msg.labels,
+                Message.is_deleted: False,
+            },
+        ).execute()
+    except Exception as e:
+        raise DatabaseError(f"Failed to save message {msg.id}: {e}")
 
-    last_indexed = datetime.now()
-    Message.insert(
-        message_id=msg.id,
-        thread_id=msg.thread_id,
-        sender=msg.sender,
-        recipients=msg.recipients,
-        labels=msg.labels,
-        subject=msg.subject,
-        body=msg.body,
-        size=msg.size,
-        timestamp=msg.timestamp,
-        is_read=msg.is_read,
-        is_outgoing=msg.is_outgoing,
-        is_deleted=False,
-        last_indexed=last_indexed,
-    ).on_conflict(
-        conflict_target=[Message.message_id],
-        preserve=[
-            Message.thread_id,
-            Message.sender,
-            Message.recipients,
-            Message.subject,
-            Message.body,
-            Message.size,
-            Message.timestamp,
-            Message.is_outgoing,
-        ],
-        update={
-            Message.is_read: msg.is_read,
-            Message.last_indexed: last_indexed,
-            Message.labels: msg.labels,
-            Message.is_deleted: False,
-        },
-    ).execute()
 
-
-def last_indexed() -> datetime:
+def last_indexed() -> Optional[datetime]:
     """
     Returns the timestamp of the last indexed message.
 
     Returns:
-        datetime: The timestamp of the last indexed message.
+        Optional[datetime]: The timestamp of the last indexed message, or None if no messages exist.
     """
 
     msg = Message.select().order_by(Message.timestamp.desc()).first()
     if msg:
-        return msg.timestamp
+        timestamp: Optional[datetime] = msg.timestamp
+        return timestamp
     else:
         return None
 
 
-def first_indexed() -> datetime:
+def first_indexed() -> Optional[datetime]:
     """
     Returns the timestamp of the first indexed message.
 
     Returns:
-        datetime: The timestamp of the first indexed message.
+        Optional[datetime]: The timestamp of the first indexed message, or None if no messages exist.
     """
 
     msg = Message.select().order_by(Message.timestamp.asc()).first()
     if msg:
-        return msg.timestamp
+        timestamp: Optional[datetime] = msg.timestamp
+        return timestamp
     else:
         return None
 
 
-def mark_messages_as_deleted(message_ids: list):
+def mark_messages_as_deleted(message_ids: List[str]) -> None:
     """
     Mark messages as deleted in the database.
 
     Args:
-        message_ids (list): List of message IDs to mark as deleted.
+        message_ids (List[str]): List of message IDs to mark as deleted.
+
+    Raises:
+        DatabaseError: If the operation fails.
     """
     if not message_ids:
         return
 
-    Message.update(is_deleted=True, last_indexed=datetime.now()).where(
-        Message.message_id.in_(message_ids)
-    ).execute()
+    try:
+        if not message_ids:
+            return
+
+        # Use the SQL IN clause with proper parameter binding
+        placeholders = ",".join(["?" for _ in message_ids])
+        query = Message.update(is_deleted=True, last_indexed=datetime.now())
+        query = query.where(SQL(f"message_id IN ({placeholders})", message_ids))
+        query.execute()
+    except Exception as e:
+        raise DatabaseError(f"Failed to mark messages as deleted: {e}")
 
 
-def get_all_message_ids() -> list:
+def get_all_message_ids() -> List[str]:
     """
     Returns all message IDs stored in the database.
 
     Returns:
-        list: List of message IDs.
+        List[str]: List of message IDs.
+
+    Raises:
+        DatabaseError: If the query fails.
     """
-    return [message.message_id for message in Message.select(Message.message_id)]
+    try:
+        return [message.message_id for message in Message.select(Message.message_id)]
+    except Exception as e:
+        raise DatabaseError(f"Failed to retrieve message IDs: {e}")
 
 
-def get_deleted_message_ids() -> list:
+def get_deleted_message_ids() -> List[str]:
     """
     Returns all message IDs that are already marked as deleted.
 
     Returns:
-        list: List of deleted message IDs.
+        List[str]: List of deleted message IDs.
+
+    Raises:
+        DatabaseError: If the query fails.
     """
-    return [
-        message.message_id
-        for message in Message.select(Message.message_id).where(
-            Message.is_deleted == True
-        )
-    ]
+    try:
+        return [
+            message.message_id
+            for message in Message.select(Message.message_id).where(
+                Message.is_deleted == True
+            )
+        ]
+    except Exception as e:
+        raise DatabaseError(f"Failed to retrieve deleted message IDs: {e}")
