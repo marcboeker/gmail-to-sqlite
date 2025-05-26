@@ -27,9 +27,9 @@ Here is a detailed guide on how to create the credentials: [https://developers.g
 
 ### Sync all emails
 
-1. Run the script: `uv run main.py sync --data-dir path/to/your/data` where `--<data-dir>` is the path where all data is stored. This creates a SQLite database in `<data-dir>/messages.db` and stores the user credentials under `<data-dir>/credentials.json`.
+1. Run the script: `uv run main.py sync --data-dir path/to/your/data` where `--<data-dir>` is the path where all data is stored. This creates a SQLite database in `<data-dir>/messages.db` and stores the user credentials under `<data-dir>/token.json`.
 2. After the script has finished, you can query the database using, for example, the `sqlite3` command line tool: `sqlite3 <data-dir>/messages.db`.
-3. You can run the script again to sync all new messages. Provide `--full-sync` to force a full sync. However, this will only update the read status, the labels, and the last indexed timestamp for existing messages.
+3. You can run the script again to sync all new messages. Provide `--full-sync` to force a full sync. This will update the read status, the labels, and the last indexed timestamp for existing messages, and also detect any messages that have been deleted from Gmail and mark them with `is_deleted = True` in the database.
 
 ### Sync a single message
 
@@ -38,14 +38,15 @@ Here is a detailed guide on how to create the credentials: [https://developers.g
 ## Commandline parameters
 
 ```
-usage: main.py [-h] [--data-dir DATA_DIR] [--update] {sync, sync-message}
+usage: main.py [-h] [--data-dir DATA_DIR] [--update] {sync, sync-message, sync-deleted-messages}
 
 Main commands:
 sync                    Sync emails from Gmail to the database.
 sync-message            Sync a single message from Gmail to the database.
+sync-deleted-messages   Only check for deleted messages and update the is_deleted flag without downloading full message content.
 
 --data-dir DATA_DIR     Path to the directory where all data is stored.
---full-sync             Force a full sync.
+--full-sync             Force a full sync and detect deleted messages.
 --message-id MESSAGE_ID Sync only the message with the given message id.
 --workers WORKERS       Number of worker threads for parallel fetching (default: number of CPU cores).
 ```
@@ -81,6 +82,7 @@ CREATE TABLE IF NOT EXISTS "messages" (
     "timestamp" DATETIME NOT NULL, -- When the email was sent/received
     "is_read" INTEGER NOT NULL, -- 0=Unread, 1=Read
     "is_outgoing" INTEGER NOT NULL, -- 0=Incoming, 1=Outgoing
+    "is_deleted" INTEGER NOT NULL, -- 0=Available in Gmail, 1=Deleted from Gmail
     "last_indexed" DATETIME NOT NULL -- Timestamp when the email was last seen on the server
 );
 ```
@@ -167,6 +169,11 @@ GROUP BY sender->>'$.email'
 ORDER BY total_size DESC
 ```
 
-## Roadmap
+### Find all deleted messages
 
-- [ ] Detect deleted emails and mark them as deleted in the database.
+```sql
+SELECT message_id, subject, timestamp
+FROM messages
+WHERE is_deleted=1
+ORDER BY timestamp DESC
+```
