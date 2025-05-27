@@ -5,8 +5,8 @@ import signal
 import sys
 from typing import Any, Callable, List, Optional
 
-from gmail_to_sqlite import auth, db, sync
-from gmail_to_sqlite.constants import DEFAULT_WORKERS, LOG_FORMAT
+from . import auth, db, sync
+from .constants import DEFAULT_WORKERS, LOG_FORMAT
 
 
 class ApplicationError(Exception):

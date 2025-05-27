@@ -1,0 +1,9 @@
+include README.md
+include LICENSE
+include pyproject.toml
+include uv.lock
+recursive-include gmail_to_sqlite *.py
+recursive-include tests *.py
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude .pytest_cache
