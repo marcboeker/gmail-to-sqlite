@@ -149,16 +149,6 @@ def create_message(msg: Any) -> None:
             last_indexed=last_indexed,
         ).on_conflict(
             conflict_target=[Message.message_id],
-            preserve=[
-                Message.thread_id,
-                Message.sender,
-                Message.recipients,
-                Message.subject,
-                Message.body,
-                Message.size,
-                Message.timestamp,
-                Message.is_outgoing,
-            ],
             update={
                 Message.is_read: msg.is_read,
                 Message.last_indexed: last_indexed,
