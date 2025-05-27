@@ -24,6 +24,25 @@ class DatabaseError(Exception):
     pass
 
 
+class SchemaVersion(Model):
+    """
+    Represents the database schema version.
+
+    Attributes:
+        version (IntegerField): The current schema version number.
+
+    Meta:
+        database (Database): The database connection to use.
+        db_table (str): The name of the database table for storing schema version.
+    """
+
+    version = IntegerField()
+
+    class Meta:
+        database = database_proxy
+        db_table = "schema_version"
+
+
 class Message(Model):
     """
     Represents an email message.
@@ -85,12 +104,17 @@ def init(data_dir: str, enable_logging: bool = False) -> SqliteDatabase:
         db_path = f"{data_dir}/{DATABASE_FILE_NAME}"
         db = SqliteDatabase(db_path)
         database_proxy.initialize(db)
-        db.create_tables([Message])
+        db.create_tables([Message, SchemaVersion])
 
         if enable_logging:
             logger = logging.getLogger("peewee")
             logger.setLevel(logging.DEBUG)
             logger.addHandler(logging.StreamHandler())
+
+        from .migrations import run_migrations
+
+        if not run_migrations():
+            raise DatabaseError("Failed to run database migrations")
 
         return db
     except Exception as e:
