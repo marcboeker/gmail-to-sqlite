@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+"""
+Gmail to SQLite CLI entry point.
+
+This script provides a command-line interface for the gmail-to-sqlite package.
+"""
+
+import sys
+from gmail_to_sqlite.main import main
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 
 from bs4 import BeautifulSoup
 
-from constants import SUPPORTED_MIME_TYPES
+from .constants import SUPPORTED_MIME_TYPES
 
 
 class MessageParsingError(Exception):

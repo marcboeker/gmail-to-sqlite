@@ -5,7 +5,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-from constants import GMAIL_SCOPES, OAUTH2_CREDENTIALS_FILE, TOKEN_FILE_NAME
+from .constants import GMAIL_SCOPES, OAUTH2_CREDENTIALS_FILE, TOKEN_FILE_NAME
 
 
 class AuthenticationError(Exception):

@@ -8,9 +8,8 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from peewee import IntegrityError
 
-import db
-import message
-from constants import (
+from . import db, message
+from .constants import (
     DEFAULT_WORKERS,
     GMAIL_API_VERSION,
     MAX_RESULTS_PER_PAGE,

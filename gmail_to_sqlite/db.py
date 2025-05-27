@@ -13,7 +13,7 @@ from peewee import (
 )
 from playhouse.sqlite_ext import JSONField, SqliteDatabase
 
-from constants import DATABASE_FILE_NAME
+from .constants import DATABASE_FILE_NAME
 
 database_proxy = Proxy()
 
@@ -196,10 +196,13 @@ def mark_messages_as_deleted(message_ids: List[str]) -> None:
             return
 
         # Use the SQL IN clause with proper parameter binding
-        placeholders = ",".join(["?" for _ in message_ids])
-        query = Message.update(is_deleted=True, last_indexed=datetime.now())
-        query = query.where(SQL(f"message_id IN ({placeholders})", message_ids))
-        query.execute()
+        batch_size = 100
+        for i in range(0, len(message_ids), batch_size):
+            batch = message_ids[i : i + batch_size]
+            placeholders = ",".join(["?" for _ in batch])
+            query = Message.update(is_deleted=True, last_indexed=datetime.now())
+            query = query.where(SQL(f"message_id IN ({placeholders})", batch))
+            query.execute()
     except Exception as e:
         raise DatabaseError(f"Failed to mark messages as deleted: {e}")
 
