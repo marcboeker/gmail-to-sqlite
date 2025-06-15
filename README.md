@@ -46,9 +46,12 @@ A robust Python application that syncs Gmail messages to a local SQLite database
 
 ### Basic Commands
 
+You can run the application using either `python` directly or via `uv`:
+
 ```bash
 # Incremental sync (default)
 python main.py sync --data-dir ./data
+# or: uv run main.py sync --data-dir ./data
 
 # Full sync with deletion detection
 python main.py sync --data-dir ./data --full-sync
@@ -61,6 +64,10 @@ python main.py sync-deleted-messages --data-dir ./data
 
 # Use custom number of worker threads
 python main.py sync --data-dir ./data --workers 8
+
+# Get help
+python main.py --help
+python main.py sync --help
 ```
 
 ### Command Line Arguments
@@ -70,6 +77,7 @@ python main.py sync --data-dir ./data --workers 8
 - `--full-sync`: Optional. Forces a complete sync of all messages
 - `--message-id`: Required for `sync-message`. The ID of a specific message to sync
 - `--workers`: Optional. Number of worker threads (default: number of CPU cores)
+- `--help`: Show help information for commands and options
 
 ### Graceful Shutdown
 
