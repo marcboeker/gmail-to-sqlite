@@ -155,14 +155,16 @@ def get_message_ids_from_gmail(
     service: Any,
     query: Optional[List[str]] = None,
     check_shutdown: Optional[Callable[[], bool]] = None,
+    label_filter: Optional[str] = None,
 ) -> List[str]:
     """
-    Fetches all message IDs from Gmail matching the query.
+    Fetches all message IDs from Gmail matching the query and label filter.
 
     Args:
         service: The Gmail API service object.
         query: Optional list of query strings to filter messages.
         check_shutdown: Callback that returns True if shutdown is requested.
+        label_filter: Optional label name to filter messages by.
 
     Returns:
         List[str]: List of message IDs from Gmail.
@@ -175,6 +177,8 @@ def get_message_ids_from_gmail(
     collected_count = 0
 
     logging.info("Collecting all message IDs from Gmail...")
+    if label_filter:
+        logging.info(f"Filtering messages by label: {label_filter}")
 
     try:
         while not (check_shutdown and check_shutdown()):
@@ -186,8 +190,16 @@ def get_message_ids_from_gmail(
             if page_token:
                 list_params["pageToken"] = page_token
 
+            # Build query string
+            query_parts = []
             if query:
-                list_params["q"] = " | ".join(query)
+                query_parts.extend(query)
+            
+            if label_filter:
+                query_parts.append(f"label:{label_filter}")
+
+            if query_parts:
+                list_params["q"] = " ".join(query_parts)
 
             results = service.users().messages().list(**list_params).execute()
             messages_page = results.get("messages", [])
@@ -284,6 +296,7 @@ def all_messages(
     full_sync: bool = False,
     num_workers: int = 4,
     check_shutdown: Optional[Callable[[], bool]] = None,
+    label_filter: Optional[str] = None,
 ) -> int:
     """
     Fetches messages from the Gmail API using the provided credentials, in parallel.
@@ -295,6 +308,7 @@ def all_messages(
         full_sync (bool): Whether to do a full sync or not.
         num_workers (int): Number of worker threads for parallel fetching.
         check_shutdown (callable): A callback function that returns True if shutdown is requested.
+        label_filter (str, optional): Only sync messages with this specific label.
 
     Returns:
         int: The number of messages successfully synced.
@@ -315,7 +329,7 @@ def all_messages(
         service = _create_service(credentials)
         labels = get_labels(service)
 
-        all_message_ids = get_message_ids_from_gmail(service, query, check_shutdown)
+        all_message_ids = get_message_ids_from_gmail(service, query, check_shutdown, label_filter)
 
         if check_shutdown and check_shutdown():
             logging.info(
@@ -412,7 +426,9 @@ def all_messages(
 
 
 def sync_deleted_messages(
-    credentials: Any, check_shutdown: Optional[Callable[[], bool]] = None
+    credentials: Any, 
+    check_shutdown: Optional[Callable[[], bool]] = None,
+    label_filter: Optional[str] = None,
 ) -> None:
     """
     Compares message IDs in Gmail with those in the database and marks missing messages as deleted.
@@ -422,6 +438,7 @@ def sync_deleted_messages(
     Args:
         credentials: The credentials used to authenticate the Gmail API.
         check_shutdown (callable): A callback function that returns True if shutdown is requested.
+        label_filter (str, optional): Only consider messages with this specific label.
 
     Returns:
         int: Number of messages marked as deleted.
@@ -429,7 +446,7 @@ def sync_deleted_messages(
     try:
         service = _create_service(credentials)
         gmail_message_ids = get_message_ids_from_gmail(
-            service, check_shutdown=check_shutdown
+            service, check_shutdown=check_shutdown, label_filter=label_filter
         )
 
         if check_shutdown and check_shutdown():
