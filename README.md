@@ -10,6 +10,7 @@ A robust Python application that syncs Gmail messages to a local SQLite database
 - **Robust Error Handling**: Automatic retries with exponential backoff
 - **Graceful Shutdown**: Handles interruption signals cleanly
 - **Type Safety**: Comprehensive type hints throughout the codebase
+- **Label Filtering**: Sync only messages with specific Gmail labels
 
 ## Installation
 
@@ -56,11 +57,17 @@ python main.py sync --data-dir ./data
 # Full sync with deletion detection
 python main.py sync --data-dir ./data --full-sync
 
+# Sync only messages with a specific label
+python main.py sync --data-dir ./data --query "label:Transactional"
+
 # Sync a specific message
 python main.py sync-message --data-dir ./data --message-id MESSAGE_ID
 
 # Detect and mark deleted messages only
 python main.py sync-deleted-messages --data-dir ./data
+
+# Detect deleted messages for a specific label
+python main.py sync-deleted-messages --data-dir ./data --query "label:Work"
 
 # Use custom number of worker threads
 python main.py sync --data-dir ./data --workers 8
@@ -76,6 +83,7 @@ python main.py sync --help
 - `--data-dir`: Required. Directory where the SQLite database will be stored
 - `--full-sync`: Optional. Forces a complete sync of all messages
 - `--message-id`: Required for `sync-message`. The ID of a specific message to sync
+- `--query`: Optional. A Gmail query string to filter messages (e.g., 'label:Transactional', 'from:user@example.com').
 - `--workers`: Optional. Number of worker threads (default: number of CPU cores)
 - `--help`: Show help information for commands and options
 

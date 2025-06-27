@@ -99,6 +99,8 @@ Commands:
 Examples:
   %(prog)s sync --data-dir ./data
   %(prog)s sync --data-dir ./data --full-sync
+  %(prog)s sync --data-dir ./data --query "label:Important"
+  %(prog)s sync-deleted-messages --data-dir ./data --query "label:Work"
   %(prog)s sync-message --data-dir ./data --message-id abc123
         """,
     )
@@ -119,6 +121,10 @@ Examples:
     parser.add_argument(
         "--message-id",
         help="The ID of the message to sync (required for sync-message command)",
+    )
+    parser.add_argument(
+        "--query",
+        help="A Gmail query string to filter messages (e.g., 'label:Important', 'from:user@example.com')",
     )
     parser.add_argument(
         "--workers",
@@ -164,13 +170,14 @@ def main() -> None:
                     full_sync=args.full_sync,
                     num_workers=args.workers,
                     check_shutdown=check_shutdown,
+                    query=args.query,
                 )
             elif args.command == "sync-message":
                 sync.single_message(
                     credentials, args.message_id, check_shutdown=check_shutdown
                 )
             elif args.command == "sync-deleted-messages":
-                sync.sync_deleted_messages(credentials, check_shutdown=check_shutdown)
+                sync.sync_deleted_messages(credentials, check_shutdown=check_shutdown, query=args.query)
 
             db_conn.close()
             logging.info("Operation completed successfully")
