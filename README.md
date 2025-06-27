@@ -58,7 +58,7 @@ python main.py sync --data-dir ./data
 python main.py sync --data-dir ./data --full-sync
 
 # Sync only messages with a specific label
-python main.py sync --data-dir ./data --label "Transactional"
+python main.py sync --data-dir ./data --query "label:Transactional"
 
 # Sync a specific message
 python main.py sync-message --data-dir ./data --message-id MESSAGE_ID
@@ -67,7 +67,7 @@ python main.py sync-message --data-dir ./data --message-id MESSAGE_ID
 python main.py sync-deleted-messages --data-dir ./data
 
 # Detect deleted messages for a specific label
-python main.py sync-deleted-messages --data-dir ./data --label "Work"
+python main.py sync-deleted-messages --data-dir ./data --query "label:Work"
 
 # Use custom number of worker threads
 python main.py sync --data-dir ./data --workers 8
@@ -83,7 +83,7 @@ python main.py sync --help
 - `--data-dir`: Required. Directory where the SQLite database will be stored
 - `--full-sync`: Optional. Forces a complete sync of all messages
 - `--message-id`: Required for `sync-message`. The ID of a specific message to sync
-- `--label`: Optional. Only sync messages with this specific Gmail label (e.g., 'Transactional', 'Work', etc.)
+- `--query`: Optional. A Gmail query string to filter messages (e.g., 'label:Transactional', 'from:user@example.com').
 - `--workers`: Optional. Number of worker threads (default: number of CPU cores)
 - `--help`: Show help information for commands and options
 

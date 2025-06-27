@@ -153,18 +153,16 @@ def _create_service(credentials: Any) -> Any:
 
 def get_message_ids_from_gmail(
     service: Any,
-    query: Optional[List[str]] = None,
+    query: Optional[str] = None,
     check_shutdown: Optional[Callable[[], bool]] = None,
-    label_filter: Optional[str] = None,
 ) -> List[str]:
     """
-    Fetches all message IDs from Gmail matching the query and label filter.
+    Fetches all message IDs from Gmail matching the query.
 
     Args:
         service: The Gmail API service object.
-        query: Optional list of query strings to filter messages.
+        query: Optional query string to filter messages.
         check_shutdown: Callback that returns True if shutdown is requested.
-        label_filter: Optional label name to filter messages by.
 
     Returns:
         List[str]: List of message IDs from Gmail.
@@ -177,8 +175,8 @@ def get_message_ids_from_gmail(
     collected_count = 0
 
     logging.info("Collecting all message IDs from Gmail...")
-    if label_filter:
-        logging.info(f"Filtering messages by label: {label_filter}")
+    if query:
+        logging.info(f"Filtering messages with query: {query}")
 
     try:
         while not (check_shutdown and check_shutdown()):
@@ -190,16 +188,8 @@ def get_message_ids_from_gmail(
             if page_token:
                 list_params["pageToken"] = page_token
 
-            # Build query string
-            query_parts = []
             if query:
-                query_parts.extend(query)
-            
-            if label_filter:
-                query_parts.append(f"label:{label_filter}")
-
-            if query_parts:
-                list_params["q"] = " ".join(query_parts)
+                list_params["q"] = query
 
             results = service.users().messages().list(**list_params).execute()
             messages_page = results.get("messages", [])
@@ -294,21 +284,20 @@ def _detect_and_mark_deleted_messages(
 def all_messages(
     credentials: Any,
     full_sync: bool = False,
-    num_workers: int = 4,
+    num_workers: int = DEFAULT_WORKERS,
     check_shutdown: Optional[Callable[[], bool]] = None,
-    label_filter: Optional[str] = None,
+    query: Optional[str] = None,
 ) -> int:
     """
     Fetches messages from the Gmail API using the provided credentials, in parallel.
     Also detects and marks deleted messages.
 
     Args:
-        credentials (object): The credentials object used to authenticate the API request.
-        db_conn (object): The database connection object.
-        full_sync (bool): Whether to do a full sync or not.
+        credentials (object): The credentials object for API authentication.
+        full_sync (bool): If True, syncs all messages regardless of previous syncs.
         num_workers (int): Number of worker threads for parallel fetching.
-        check_shutdown (callable): A callback function that returns True if shutdown is requested.
-        label_filter (str, optional): Only sync messages with this specific label.
+        check_shutdown (callable): A callback that returns True if shutdown is requested.
+        query (str, optional): A Gmail query string to filter messages.
 
     Returns:
         int: The number of messages successfully synced.
@@ -317,19 +306,42 @@ def all_messages(
     future_to_id = {}
 
     try:
-        query = []
-        if not full_sync:
-            last = db.last_indexed()
-            if last:
-                query.append(f"after:{int(last.timestamp())}")
-            first = db.first_indexed()
-            if first:
-                query.append(f"before:{int(first.timestamp())}")
-
         service = _create_service(credentials)
         labels = get_labels(service)
+        all_message_ids = []
+        base_query = query if query else ""
 
-        all_message_ids = get_message_ids_from_gmail(service, query, check_shutdown, label_filter)
+        if not full_sync:
+            # Fetch messages newer than the last indexed
+            last = db.last_indexed()
+            if last:
+                new_query = f"{base_query} after:{int(last.timestamp())}".strip()
+                logging.info(f"Fetching new messages with query: {new_query}")
+                all_message_ids.extend(
+                    get_message_ids_from_gmail(service, new_query, check_shutdown)
+                )
+
+            # Fetch messages older than the first indexed (backfill)
+            first = db.first_indexed()
+            if first:
+                old_query = f"{base_query} before:{int(first.timestamp())}".strip()
+                logging.info(f"Backfilling old messages with query: {old_query}")
+                all_message_ids.extend(
+                    get_message_ids_from_gmail(service, old_query, check_shutdown)
+                )
+
+            # If it's the very first sync, there's no last or first, so run with the base query
+            if not last and not first:
+                logging.info(f"Performing initial sync with query: {base_query}")
+                all_message_ids.extend(
+                    get_message_ids_from_gmail(service, base_query, check_shutdown)
+                )
+        else:
+            # Full sync requested
+            logging.info(f"Performing full sync with query: {base_query}")
+            all_message_ids = get_message_ids_from_gmail(
+                service, base_query, check_shutdown
+            )
 
         if check_shutdown and check_shutdown():
             logging.info(
@@ -428,7 +440,7 @@ def all_messages(
 def sync_deleted_messages(
     credentials: Any, 
     check_shutdown: Optional[Callable[[], bool]] = None,
-    label_filter: Optional[str] = None,
+    query: Optional[str] = None,
 ) -> None:
     """
     Compares message IDs in Gmail with those in the database and marks missing messages as deleted.
@@ -438,7 +450,7 @@ def sync_deleted_messages(
     Args:
         credentials: The credentials used to authenticate the Gmail API.
         check_shutdown (callable): A callback function that returns True if shutdown is requested.
-        label_filter (str, optional): Only consider messages with this specific label.
+        query (str, optional): A Gmail query string to filter messages.
 
     Returns:
         int: Number of messages marked as deleted.
@@ -446,7 +458,7 @@ def sync_deleted_messages(
     try:
         service = _create_service(credentials)
         gmail_message_ids = get_message_ids_from_gmail(
-            service, check_shutdown=check_shutdown, label_filter=label_filter
+            service, check_shutdown=check_shutdown, query=query
         )
 
         if check_shutdown and check_shutdown():
