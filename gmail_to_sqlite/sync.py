@@ -1,8 +1,9 @@
 import concurrent.futures
 import logging
 import socket
+import threading
 import time
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -24,6 +25,25 @@ class SyncError(Exception):
     """Custom exception for synchronization errors."""
 
     pass
+
+
+# Thread-local storage for Gmail API service instances
+_thread_local = threading.local()
+
+
+def _get_thread_service(credentials: Any) -> Any:
+    """
+    Gets or creates a Gmail API service for the current thread.
+
+    Args:
+        credentials: The credentials object for API authentication.
+
+    Returns:
+        The Gmail API service object for this thread.
+    """
+    if not hasattr(_thread_local, "service"):
+        _thread_local.service = _create_service(credentials)
+    return _thread_local.service
 
 
 def _fetch_message(
@@ -146,7 +166,9 @@ def _create_service(credentials: Any) -> Any:
         SyncError: If service creation fails.
     """
     try:
-        return build("gmail", GMAIL_API_VERSION, credentials=credentials)
+        return build(
+            "gmail", GMAIL_API_VERSION, credentials=credentials, cache_discovery=False
+        )
     except Exception as e:
         raise SyncError(f"Failed to create Gmail service: {e}")
 
@@ -335,7 +357,7 @@ def all_messages(
             if check_shutdown and check_shutdown():
                 return False
 
-            service = _create_service(credentials)
+            service = _get_thread_service(credentials)
 
             try:
                 msg = _fetch_message(
