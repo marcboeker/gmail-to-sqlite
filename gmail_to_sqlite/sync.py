@@ -418,9 +418,6 @@ def all_messages(
                     logging.error(
                         f"Message ID {message_id} generated an exception during future processing: {exc}"
                     )
-                    logging.error(
-                        f"Message ID {message_id} generated an exception during future processing: {exc}"
-                    )
 
         if check_shutdown and check_shutdown():
             logging.info("Sync process was interrupted. Partial results saved.")
