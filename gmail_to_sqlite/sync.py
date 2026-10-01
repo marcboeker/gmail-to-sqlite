@@ -73,7 +73,7 @@ def _fetch_message(
 
         try:
             raw_msg = (
-                service.users().messages().get(userId="me", id=message_id).execute()
+                fetch_message_with_backoff(service, message_id)
             )
             return message.Message.from_raw(raw_msg, labels)
 
@@ -510,3 +510,20 @@ def single_message(
         logging.info(f"Message fetch for {message_id} was interrupted")
     except Exception as e:
         logging.error(f"Failed to fetch message {message_id}: {str(e)}")
+
+def fetch_message_with_backoff(service, message_id, max_retries=5):
+    for attempt in range(max_retries):
+        try:
+            # High cost: 100 units per call
+            return service.users().messages().get(userId='me', id=message_id, format='full').execute()
+        except HttpError as error:
+            if error.resp.status == 403 and b"rateLimitExceeded" in error.content:
+                # Add jitter (randomness) to prevent synchronization issues
+                sleep_time = (2 ** attempt) + random.uniform(0, 1)
+                print(f"Rate limit hit for message {message_id}. Sleeping for {sleep_time:.2f}s...")
+                time.sleep(sleep_time)
+            else:
+                raise error
+    raise Exception(f"Failed to fetch message {message_id} after maximum retries.")
+        
+
