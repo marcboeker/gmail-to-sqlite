@@ -515,7 +515,7 @@ def fetch_message_with_backoff(service, message_id, max_retries=5):
     for attempt in range(max_retries):
         try:
             # High cost: 100 units per call
-            return service.users().messages().get(userId='me', id=message_id, format='full').execute()
+            return service.users().messages().get(userId='me', id=message_id).execute()
         except HttpError as error:
             if error.resp.status == 403 and b"rateLimitExceeded" in error.content:
                 # Add jitter (randomness) to prevent synchronization issues
