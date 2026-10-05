@@ -6,18 +6,19 @@ import time
 from typing import Any, Callable, Dict, List, Optional
 
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError, Error as GoogleApiError
+from googleapiclient.errors import Error as GoogleApiError
+from googleapiclient.errors import HttpError
 from peewee import IntegrityError
 
 from . import db, message
 from .constants import (
+    API_NUM_RETRIES,
+    COLLECTION_LOG_INTERVAL,
     GMAIL_API_VERSION,
     MAX_RESULTS_PER_PAGE,
     MAX_RETRY_ATTEMPTS,
-    RETRY_DELAY_SECONDS,
     PROGRESS_LOG_INTERVAL,
-    COLLECTION_LOG_INTERVAL,
-    API_NUM_RETRIES
+    RETRY_DELAY_SECONDS,
 )
 
 
@@ -74,10 +75,10 @@ def _fetch_message(
 
         try:
             raw_msg = (
-                 service.users()
-                 .messages()
-                 .get(userId="me", id=message_id)
-                 .execute(num_retries=API_NUM_RETRIES)
+                service.users()
+                .messages()
+                .get(userId="me", id=message_id)
+                .execute(num_retries=API_NUM_RETRIES)
             )
             return message.Message.from_raw(raw_msg, labels)
 
@@ -147,10 +148,12 @@ def get_labels(service: Any) -> Dict[str, str]:
     """
     try:
         labels = {}
-        response = service.users()
+        response = (
+            service.users()
             .labels()
             .list(userId="me")
             .execute(num_retries=API_NUM_RETRIES)
+        )
         for label in response.get("labels", []):
             labels[label["id"]] = label["name"]
         return labels
@@ -217,9 +220,12 @@ def get_message_ids_from_gmail(
             if query:
                 list_params["q"] = " | ".join(query)
 
-            results = service.users()
-                        .messages()
-                        .list(**list_params).execute(num_retries=API_NUM_RETRIES)
+            results = (
+                service.users()
+                .messages()
+                .list(**list_params)
+                .execute(num_retries=API_NUM_RETRIES)
+            )
             messages_page = results.get("messages", [])
 
             for m_info in messages_page:
@@ -369,10 +375,7 @@ def all_messages(
 
             try:
                 msg = _fetch_message(
-                    service,
-                    message_id,
-                    labels,
-                    check_interrupt=check_shutdown
+                    service, message_id, labels, check_interrupt=check_shutdown
                 )
                 try:
                     db.create_message(msg)
@@ -519,6 +522,3 @@ def single_message(
         logging.info(f"Message fetch for {message_id} was interrupted")
     except Exception as e:
         logging.error(f"Failed to fetch message {message_id}: {str(e)}")
-
-        
-
