@@ -73,7 +73,10 @@ def _fetch_message(
 
         try:
             raw_msg = (
-                fetch_message_with_backoff(service, message_id)
+                 service.users()
+                 .messages()
+                 .get(userId="me", id=message_id)
+                 .execute(num_retries=API_NUM_RETRIES)
             )
             return message.Message.from_raw(raw_msg, labels)
 
@@ -143,7 +146,11 @@ def get_labels(service: Any) -> Dict[str, str]:
     """
     try:
         labels = {}
-        response = service.users().labels().list(userId="me").execute()
+        response = service.
+            users().
+            labels().
+            list(userId="me").
+            execute(num_retries=API_NUM_RETRIES)
         for label in response.get("labels", []):
             labels[label["id"]] = label["name"]
         return labels
@@ -210,7 +217,10 @@ def get_message_ids_from_gmail(
             if query:
                 list_params["q"] = " | ".join(query)
 
-            results = service.users().messages().list(**list_params).execute()
+            results = service
+                        .users()
+                        .messages()
+                        .list(**list_params).execute(num_retries=API_NUM_RETRIES)
             messages_page = results.get("messages", [])
 
             for m_info in messages_page:
@@ -363,7 +373,7 @@ def all_messages(
                     service,
                     message_id,
                     labels,
-                    check_interrupt=check_shutdown,
+                    check_interrupt=check_shutdown
                 )
                 try:
                     db.create_message(msg)
@@ -511,19 +521,5 @@ def single_message(
     except Exception as e:
         logging.error(f"Failed to fetch message {message_id}: {str(e)}")
 
-def fetch_message_with_backoff(service, message_id, max_retries=5):
-    for attempt in range(max_retries):
-        try:
-            # High cost: 100 units per call
-            return service.users().messages().get(userId='me', id=message_id).execute()
-        except HttpError as error:
-            if error.resp.status == 403 and b"rateLimitExceeded" in error.content:
-                # Add jitter (randomness) to prevent synchronization issues
-                sleep_time = (2 ** attempt) + random.uniform(0, 1)
-                print(f"Rate limit hit for message {message_id}. Sleeping for {sleep_time:.2f}s...")
-                time.sleep(sleep_time)
-            else:
-                raise error
-    raise Exception(f"Failed to fetch message {message_id} after maximum retries.")
         
 
