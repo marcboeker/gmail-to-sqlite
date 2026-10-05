@@ -147,11 +147,11 @@ def get_labels(service: Any) -> Dict[str, str]:
     """
     try:
         labels = {}
-        response = service.
-            users().
-            labels().
-            list(userId="me").
-            execute(num_retries=API_NUM_RETRIES)
+        response = service
+            .users()
+            .labels()
+            .list(userId="me")
+            .execute(num_retries=API_NUM_RETRIES)
         for label in response.get("labels", []):
             labels[label["id"]] = label["name"]
         return labels
