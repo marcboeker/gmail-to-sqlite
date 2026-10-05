@@ -16,6 +16,7 @@ MAX_RESULTS_PER_PAGE: int = 500
 DEFAULT_WORKERS: int = 4
 MAX_RETRY_ATTEMPTS: int = 3
 RETRY_DELAY_SECONDS: int = 5
+API_NUM_RETRIES: int = 7
 
 # MIME Types for email body extraction
 SUPPORTED_MIME_TYPES: List[str] = [
