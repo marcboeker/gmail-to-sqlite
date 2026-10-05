@@ -147,8 +147,7 @@ def get_labels(service: Any) -> Dict[str, str]:
     """
     try:
         labels = {}
-        response = service
-            .users()
+        response = service.users()
             .labels()
             .list(userId="me")
             .execute(num_retries=API_NUM_RETRIES)
@@ -218,8 +217,7 @@ def get_message_ids_from_gmail(
             if query:
                 list_params["q"] = " | ".join(query)
 
-            results = service
-                        .users()
+            results = service.users()
                         .messages()
                         .list(**list_params).execute(num_retries=API_NUM_RETRIES)
             messages_page = results.get("messages", [])
