@@ -17,6 +17,7 @@ from .constants import (
     RETRY_DELAY_SECONDS,
     PROGRESS_LOG_INTERVAL,
     COLLECTION_LOG_INTERVAL,
+    API_NUM_RETRIES
 )
 
 
